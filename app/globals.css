@@ -1,0 +1,130 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* СНАРК Brand Colors */
+  --background: 255 255 255;
+  --foreground: 22 34 59;
+  --card: 255 255 255;
+  --card-foreground: 22 34 59;
+  --popover: 255 255 255;
+  --popover-foreground: 22 34 59;
+  --primary: 22 34 59;
+  --primary-foreground: 255 255 255;
+  --secondary: 40 54 123;
+  --secondary-foreground: 255 255 255;
+  --muted: 238 242 245;
+  --muted-foreground: 111 158 212;
+  --accent: 115 177 129;
+  --accent-foreground: 255 255 255;
+  --destructive: 221 103 68;
+  --destructive-foreground: 255 255 255;
+  --border: 238 242 245;
+  --input: 238 242 245;
+  --ring: 40 54 123;
+  --chart-1: 40 54 123;
+  --chart-2: 111 158 212;
+  --chart-3: 115 177 129;
+  --chart-4: 221 103 68;
+  --chart-5: 22 34 59;
+  --radius: 0.5rem;
+  --sidebar: 22 34 59;
+  --sidebar-foreground: 255 255 255;
+  --sidebar-primary: 40 54 123;
+  --sidebar-primary-foreground: 255 255 255;
+  --sidebar-accent: 115 177 129;
+  --sidebar-accent-foreground: 255 255 255;
+  --sidebar-border: 40 54 123;
+  --sidebar-ring: 111 158 212;
+}
+
+.dark {
+  --background: 22 34 59;
+  --foreground: 255 255 255;
+  --card: 30 45 75;
+  --card-foreground: 255 255 255;
+  --popover: 30 45 75;
+  --popover-foreground: 255 255 255;
+  --primary: 111 158 212;
+  --primary-foreground: 22 34 59;
+  --secondary: 40 54 123;
+  --secondary-foreground: 255 255 255;
+  --muted: 50 70 100;
+  --muted-foreground: 111 158 212;
+  --accent: 115 177 129;
+  --accent-foreground: 22 34 59;
+  --destructive: 221 103 68;
+  --destructive-foreground: 255 255 255;
+  --border: 40 54 123;
+  --input: 40 54 123;
+  --ring: 111 158 212;
+  --chart-1: 111 158 212;
+  --chart-2: 115 177 129;
+  --chart-3: 221 103 68;
+  --chart-4: 238 242 245;
+  --chart-5: 40 54 123;
+  --sidebar: 16 24 40;
+  --sidebar-foreground: 255 255 255;
+  --sidebar-primary: 111 158 212;
+  --sidebar-primary-foreground: 22 34 59;
+  --sidebar-accent: 115 177 129;
+  --sidebar-accent-foreground: 22 34 59;
+  --sidebar-border: 40 54 123;
+  --sidebar-ring: 111 158 212;
+}
+
+@theme inline {
+  --font-sans: 'var(--font-inter)', system-ui, sans-serif;
+  --font-heading: 'var(--font-exo-2)', system-ui, sans-serif;
+  --color-background: rgb(var(--background) / <alpha-value>);
+  --color-foreground: rgb(var(--foreground) / <alpha-value>);
+  --color-card: rgb(var(--card) / <alpha-value>);
+  --color-card-foreground: rgb(var(--card-foreground) / <alpha-value>);
+  --color-popover: rgb(var(--popover) / <alpha-value>);
+  --color-popover-foreground: rgb(var(--popover-foreground) / <alpha-value>);
+  --color-primary: rgb(var(--primary) / <alpha-value>);
+  --color-primary-foreground: rgb(var(--primary-foreground) / <alpha-value>);
+  --color-secondary: rgb(var(--secondary) / <alpha-value>);
+  --color-secondary-foreground: rgb(var(--secondary-foreground) / <alpha-value>);
+  --color-muted: rgb(var(--muted) / <alpha-value>);
+  --color-muted-foreground: rgb(var(--muted-foreground) / <alpha-value>);
+  --color-accent: rgb(var(--accent) / <alpha-value>);
+  --color-accent-foreground: rgb(var(--accent-foreground) / <alpha-value>);
+  --color-destructive: rgb(var(--destructive) / <alpha-value>);
+  --color-destructive-foreground: rgb(var(--destructive-foreground) / <alpha-value>);
+  --color-border: rgb(var(--border) / <alpha-value>);
+  --color-input: rgb(var(--input) / <alpha-value>);
+  --color-ring: rgb(var(--ring) / <alpha-value>);
+  --color-chart-1: rgb(var(--chart-1) / <alpha-value>);
+  --color-chart-2: rgb(var(--chart-2) / <alpha-value>);
+  --color-chart-3: rgb(var(--chart-3) / <alpha-value>);
+  --color-chart-4: rgb(var(--chart-4) / <alpha-value>);
+  --color-chart-5: rgb(var(--chart-5) / <alpha-value>);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: rgb(var(--sidebar) / <alpha-value>);
+  --color-sidebar-foreground: rgb(var(--sidebar-foreground) / <alpha-value>);
+  --color-sidebar-primary: rgb(var(--sidebar-primary) / <alpha-value>);
+  --color-sidebar-primary-foreground: rgb(var(--sidebar-primary-foreground) / <alpha-value>);
+  --color-sidebar-accent: rgb(var(--sidebar-accent) / <alpha-value>);
+  --color-sidebar-accent-foreground: rgb(var(--sidebar-accent-foreground) / <alpha-value>);
+  --color-sidebar-border: rgb(var(--sidebar-border) / <alpha-value>);
+  --color-sidebar-ring: rgb(var(--sidebar-ring) / <alpha-value>);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-semibold tracking-tight;
+  }
+}
+
