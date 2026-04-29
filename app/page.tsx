@@ -13,6 +13,7 @@ export default function Home() {
   const [currentPage, setCurrentPage] = useState('dashboard')
 
   const handlePageChange = useCallback((page: string) => {
+    console.log('[v0] handlePageChange called with page:', page)
     setCurrentPage(page)
     setSidebarOpen(false)
   }, [])

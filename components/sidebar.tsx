@@ -63,7 +63,11 @@ export function Sidebar({
   onNavigate,
 }: SidebarProps) {
   const handleNavigate = (id: string) => {
-    onNavigate?.(id)
+    console.log('[v0] Sidebar handleNavigate called with id:', id)
+    console.log('[v0] onNavigate function exists:', !!onNavigate)
+    if (onNavigate) {
+      onNavigate(id)
+    }
   }
 
   return (
@@ -71,7 +75,7 @@ export function Sidebar({
       {/* Mobile backdrop */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          className="fixed inset-0 top-16 z-30 bg-black/50 md:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -80,8 +84,9 @@ export function Sidebar({
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-sidebar transition-transform duration-300 ease-in-out md:relative md:z-0 md:translate-x-0',
-          isOpen ? 'translate-x-0' : '-translate-x-full'
+          'fixed top-16 bottom-0 left-0 z-40 flex w-64 flex-col bg-sidebar transition-transform duration-300 ease-in-out',
+          'md:static md:h-auto md:translate-x-0',
+          isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         )}
       >
         {/* Mobile header */}
