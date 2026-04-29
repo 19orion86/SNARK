@@ -11,62 +11,100 @@ const employees = [
     department: 'Управление',
     phone: '+7 (495) 123-45-67',
     email: 'a.petrov@snark.ru',
-    office: 'Кабинет 101',
+    office: 'Головной офис, каб. 101',
     status: 'online',
+    avatar: 'АП',
   },
   {
     id: 2,
     name: 'Елена Сидорова',
-    position: 'Директор по технологиям',
-    department: 'IT',
+    position: 'Руководитель направления',
+    department: 'СНАРК | Проект',
     phone: '+7 (495) 123-45-68',
     email: 'e.sidorova@snark.ru',
-    office: 'Кабинет 205',
+    office: 'Офис проектирования, каб. 205',
     status: 'online',
+    avatar: 'ЕС',
   },
   {
     id: 3,
     name: 'Иван Смирнов',
-    position: 'Ведущий инженер',
-    department: 'Инжиниринг',
+    position: 'Главный инженер',
+    department: 'СНАРК | Инжиниринг',
     phone: '+7 (495) 123-45-69',
     email: 'i.smirnov@snark.ru',
-    office: 'Кабинет 310',
+    office: 'Технический центр, каб. 310',
     status: 'offline',
+    avatar: 'ИС',
   },
   {
     id: 4,
     name: 'Ольга Кузнецова',
-    position: 'Менеджер проектов',
-    department: 'Проекты',
+    position: 'Руководитель проектов',
+    department: 'СНАРК | Строй',
     phone: '+7 (495) 123-45-70',
     email: 'o.kuznetsova@snark.ru',
-    office: 'Кабинет 212',
+    office: 'Строительное управление, каб. 212',
     status: 'online',
+    avatar: 'ОК',
   },
   {
     id: 5,
     name: 'Дмитрий Волков',
-    position: 'Системный администратор',
-    department: 'IT',
+    position: 'Инженер контактной сети',
+    department: 'СНАРК | Контактная сеть',
     phone: '+7 (495) 123-45-71',
     email: 'd.volkov@snark.ru',
-    office: 'Кабинет 206',
+    office: 'Производственная база, каб. 106',
     status: 'online',
+    avatar: 'ДВ',
   },
   {
     id: 6,
     name: 'Мария Орлова',
-    position: 'HR специалист',
-    department: 'Кадры',
+    position: 'Инженер-проектировщик',
+    department: 'СНАРК | Тяговые подстанции',
     phone: '+7 (495) 123-45-72',
     email: 'm.orlova@snark.ru',
-    office: 'Кабинет 103',
-    status: 'offline',
+    office: 'Проектный офис, каб. 203',
+    status: 'away',
+    avatar: 'МО',
+  },
+  {
+    id: 7,
+    name: 'Сергей Козлов',
+    position: 'Инженер-конструктор',
+    department: 'СНАРК | Стальные решения',
+    phone: '+7 (495) 123-45-73',
+    email: 's.kozlov@snark.ru',
+    office: 'Конструкторское бюро, каб. 401',
+    status: 'online',
+    avatar: 'СК',
+  },
+  {
+    id: 8,
+    name: 'Анна Белова',
+    position: 'Специалист по зарядным станциям',
+    department: 'СНАРК | Зарядные станции',
+    phone: '+7 (495) 123-45-74',
+    email: 'a.belova@snark.ru',
+    office: 'Инновационный центр, каб. 305',
+    status: 'online',
+    avatar: 'АБ',
   },
 ]
 
-const departments = ['Все', 'IT', 'Инжиниринг', 'Проекты', 'Управление', 'Кадры']
+const departments = [
+  'Все',
+  'Управление',
+  'СНАРК | Проект',
+  'СНАРК | Строй',
+  'СНАРК | Инжиниринг',
+  'СНАРК | Контактная сеть',
+  'СНАРК | Тяговые подстанции',
+  'СНАРК | Стальные решения',
+  'СНАРК | Зарядные станции',
+]
 
 export function EmployeeDirectory() {
   const [searchTerm, setSearchTerm] = useState('')
@@ -132,26 +170,29 @@ export function EmployeeDirectory() {
             className="p-6 hover:shadow-lg transition-shadow cursor-pointer"
           >
             <div className="mb-4 flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <div className="h-10 w-10 rounded-full bg-secondary/20 flex items-center justify-center">
-                    <Badge className="h-6 w-6 text-secondary" />
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary text-sm font-bold text-secondary-foreground">
+                    {emp.avatar}
                   </div>
-                  <div>
-                    <h3 className="font-heading font-bold text-foreground">
-                      {emp.name}
-                    </h3>
-                    <p className="text-sm text-secondary">{emp.position}</p>
-                  </div>
+                  <div
+                    className={`absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-card ${
+                      emp.status === 'online'
+                        ? 'bg-success'
+                        : emp.status === 'away'
+                        ? 'bg-accent'
+                        : 'bg-muted-foreground'
+                    }`}
+                    title={emp.status === 'online' ? 'В офисе' : emp.status === 'away' ? 'Отошёл' : 'Не в сети'}
+                  />
+                </div>
+                <div>
+                  <h3 className="font-bold text-card-foreground">
+                    {emp.name}
+                  </h3>
+                  <p className="text-sm text-secondary">{emp.position}</p>
                 </div>
               </div>
-              <div
-                className={`h-3 w-3 rounded-full ${
-                  emp.status === 'online'
-                    ? 'bg-accent'
-                    : 'bg-muted-foreground'
-                }`}
-              />
             </div>
 
             <div className="space-y-3 border-t border-border pt-4">

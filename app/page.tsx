@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Header } from '@/components/header'
 import { Sidebar } from '@/components/sidebar'
 import { Dashboard } from '@/components/pages/dashboard'
@@ -12,10 +12,18 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState('dashboard')
 
-  const handlePageChange = (page: string) => {
+  const handlePageChange = useCallback((page: string) => {
     setCurrentPage(page)
     setSidebarOpen(false)
-  }
+  }, [])
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarOpen(prev => !prev)
+  }, [])
+
+  const closeSidebar = useCallback(() => {
+    setSidebarOpen(false)
+  }, [])
 
   const renderPage = () => {
     switch (currentPage) {
@@ -31,18 +39,18 @@ export default function Home() {
   }
 
   return (
-    <div className="flex h-screen flex-col">
-      <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+    <div className="flex h-screen flex-col overflow-hidden">
+      <Header onMenuClick={toggleSidebar} />
       
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
+          onClose={closeSidebar}
           currentPage={currentPage}
           onNavigate={handlePageChange}
         />
 
-        <main className="flex-1 overflow-y-auto bg-background">
+        <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6">
           {renderPage()}
         </main>
       </div>

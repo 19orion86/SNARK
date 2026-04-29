@@ -6,50 +6,72 @@ import { Input } from '@/components/ui/input'
 const documents = [
   {
     id: 1,
-    title: 'Политика безопасности информации',
+    title: 'Политика информационной безопасности',
     category: 'Политики',
     date: '15 апреля 2024',
+    version: '2.1',
     size: '2.4 МБ',
+    owner: 'Служба безопасности',
     access: 'all',
   },
   {
     id: 2,
-    title: 'Регламент работы отделов',
-    category: 'Регламенты',
+    title: 'Политика обработки персональных данных',
+    category: 'Политики',
     date: '10 апреля 2024',
-    size: '1.8 МБ',
-    access: 'restricted',
+    version: '1.3',
+    size: '1.2 МБ',
+    owner: 'Юридический отдел',
+    access: 'all',
   },
   {
     id: 3,
-    title: 'Квартальный отчёт Q1 2024',
-    category: 'Отчёты',
+    title: 'Инструкция по охране труда при работе на высоте',
+    category: 'Инструкции',
     date: '8 апреля 2024',
+    version: '3.0',
     size: '5.2 МБ',
+    owner: 'Отдел ОТ и ПБ',
     access: 'all',
   },
   {
     id: 4,
-    title: 'Сведения о продукции и услугах',
-    category: 'Каталоги',
+    title: 'Регламент согласования проектной документации',
+    category: 'Регламенты',
     date: '1 апреля 2024',
+    version: '1.5',
     size: '3.1 МБ',
+    owner: 'СНАРК | Проект',
     access: 'all',
   },
   {
     id: 5,
-    title: 'Договоры с поставщиками 2024',
-    category: 'Договоры',
+    title: 'Регламент работы с подрядными организациями',
+    category: 'Регламенты',
     date: '25 марта 2024',
-    size: '7.8 МБ',
+    version: '2.0',
+    size: '4.8 МБ',
+    owner: 'СНАРК | Строй',
     access: 'restricted',
   },
   {
     id: 6,
-    title: 'Должностные инструкции',
+    title: 'Инструкция по эксплуатации тяговых подстанций',
     category: 'Инструкции',
     date: '20 марта 2024',
-    size: '4.5 МБ',
+    version: '1.2',
+    size: '8.5 МБ',
+    owner: 'СНАРК | Тяговые подстанции',
+    access: 'restricted',
+  },
+  {
+    id: 7,
+    title: 'Приказ о назначении ответственных лиц',
+    category: 'Приказы',
+    date: '15 марта 2024',
+    version: '1.0',
+    size: '0.5 МБ',
+    owner: 'Управление',
     access: 'all',
   },
 ]
@@ -57,11 +79,10 @@ const documents = [
 const categories = [
   'Все',
   'Политики',
-  'Регламенты',
-  'Отчёты',
-  'Каталоги',
-  'Договоры',
   'Инструкции',
+  'Регламенты',
+  'Приказы',
+  'Архив',
 ]
 
 export function Documents() {
@@ -141,12 +162,14 @@ export function Documents() {
                     <span className="rounded-full bg-secondary/10 px-2.5 py-1 text-secondary">
                       {doc.category}
                     </span>
+                    <span>v{doc.version}</span>
                     <span>{doc.date}</span>
                     <span>{doc.size}</span>
+                    <span className="text-muted-foreground">{doc.owner}</span>
                     {doc.access === 'restricted' && (
-                      <span className="flex items-center gap-1 text-orange-600">
+                      <span className="flex items-center gap-1 text-destructive">
                         <Lock className="h-3 w-3" />
-                        Ограничен доступ
+                        Ограничен
                       </span>
                     )}
                   </div>
