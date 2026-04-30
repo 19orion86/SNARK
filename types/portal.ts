@@ -87,18 +87,37 @@ export interface ContactsData {
 }
 
 export interface DocumentItem {
-  id: number
+  id: string
   title: string
   category: string
   date: string
   version: string
   size: string
   owner: string
-  access: "all" | "restricted"
+  access: "public" | "restricted"
+  departmentId?: string | null
+  fileName?: string
+  fileUrl?: string
+  mimeType?: string
+  createdBy?: string
 }
 
 export interface DocumentsData {
   documents: DocumentItem[]
+  categories: string[]
+  total?: number
+  page?: number
+  limit?: number
+}
+
+export interface DocumentsQuery {
+  category?: string
+  search?: string
+  page?: number
+  limit?: number
+}
+
+export type DocumentsResponse = PaginatedResponse<DocumentItem> & {
   categories: string[]
 }
 
@@ -127,18 +146,53 @@ export interface VacationItem {
 }
 
 export interface ProfileData {
+  userId?: string
   fullName: string
+  firstName?: string
+  lastName?: string
   initials: string
   roleTitle: string
+  role?: UserRole
   department: string
+  departmentId?: string | null
   phone: string
   email: string
   office: string
+  avatarUrl?: string
   presence: "office" | "away" | "offline"
   tabs: ProfileTab[]
   tasks: ProfileTask[]
   vacations: VacationItem[]
   payslips: string[]
+}
+
+export interface ProfileUpdatePayload {
+  firstName: string
+  lastName: string
+  phone?: string
+  avatarUrl?: string
+}
+
+export interface CurrentUserResponse {
+  profile: ProfileData
+}
+
+export interface DocumentMetadataCreatePayload {
+  title: string
+  category: string
+  version?: string
+  access: "public" | "restricted"
+  departmentId?: string
+  fileName: string
+  contentType: string
+  sizeBytes: number
+}
+
+export interface DocumentMetadataCreateResponse {
+  documentId: string
+  objectKey: string
+  uploadUrl: string
+  expiresAt: string
 }
 
 export interface SidebarItem {

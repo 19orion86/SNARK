@@ -1,8 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { getPortalRepository } from "@/lib/repositories/portal-repository"
-import type { ProfileData } from "@/types/portal"
+import type { CurrentUserResponse, ProfileData, ProfileUpdatePayload } from "@/types/portal"
 
 export function useProfile() {
   const [data, setData] = useState<ProfileData | null>(null)
@@ -13,8 +12,12 @@ export function useProfile() {
     setIsLoading(true)
     setError(null)
     try {
-      const result = await getPortalRepository().getProfileData()
-      setData(result)
+      const response = await fetch("/api/users/me", { method: "GET" })
+      if (!response.ok) {
+        throw new Error("API profile request failed")
+      }
+      const result = (await response.json()) as CurrentUserResponse
+      setData(result.profile)
     } catch {
       setError("Не удалось загрузить профиль")
     } finally {
@@ -26,5 +29,25 @@ export function useProfile() {
     void refetch()
   }, [])
 
-  return { data, isLoading, error, refetch }
+  const update = async (payload: ProfileUpdatePayload): Promise<boolean> => {
+    setError(null)
+    try {
+      const response = await fetch("/api/users/me", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        throw new Error("API profile update failed")
+      }
+      const result = (await response.json()) as CurrentUserResponse
+      setData(result.profile)
+      return true
+    } catch {
+      setError("Не удалось обновить профиль")
+      return false
+    }
+  }
+
+  return { data, isLoading, error, refetch, update }
 }

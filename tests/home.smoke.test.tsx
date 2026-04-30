@@ -1,9 +1,16 @@
 import { render, screen } from "@testing-library/react"
+import { vi } from "vitest"
 import { Dashboard } from "@/components/pages/dashboard"
 import { EmployeeDirectory } from "@/components/pages/employee-directory"
 import { Documents } from "@/components/pages/documents"
 import { Profile } from "@/components/pages/profile"
 import { mockPortalRepository } from "@/lib/repositories/portal-repository.mock"
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  usePathname: () => "/documents",
+  useSearchParams: () => new URLSearchParams(),
+}))
 
 describe("Home smoke", () => {
   it("renders dashboard content", async () => {

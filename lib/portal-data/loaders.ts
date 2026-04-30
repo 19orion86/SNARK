@@ -3,6 +3,7 @@ import { getPortalRepositoryServer } from "@/lib/repositories/portal-repository.
 import type {
   ContactsData,
   DashboardData,
+  DocumentsQuery,
   DocumentsData,
   EmployeesQuery,
   ProfileData,
@@ -17,12 +18,15 @@ export async function loadContactsData(query?: EmployeesQuery): Promise<Contacts
   return getPortalRepositoryServer().getContactsData(query)
 }
 
-export async function loadDocumentsData(): Promise<DocumentsData> {
-  return getPortalRepositoryServer().getDocumentsData()
+export async function loadDocumentsData(
+  query?: DocumentsQuery,
+  requester?: { role: string; userId?: string; departmentId?: string | null }
+): Promise<DocumentsData> {
+  return getPortalRepositoryServer().getDocumentsData(query, requester)
 }
 
-export async function loadProfileData(): Promise<ProfileData> {
-  return getPortalRepositoryServer().getProfileData()
+export async function loadProfileData(userId?: string): Promise<ProfileData> {
+  return getPortalRepositoryServer().getProfileData(userId)
 }
 
 export async function loadSidebarItems(): Promise<SidebarItem[]> {

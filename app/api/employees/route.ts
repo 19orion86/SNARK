@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { requireAuth, type AuthError } from "@/lib/auth/request-auth"
 import { getPortalRepositoryServer } from "@/lib/repositories/portal-repository.server"
 import {
   apiErrorSchema,
@@ -6,8 +7,9 @@ import {
   employeesResponseSchema,
 } from "@/lib/validators/portal"
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    requireAuth(request)
     const url = new URL(request.url)
     const parsed = employeesQuerySchema.safeParse({
       search: url.searchParams.get("search") ?? undefined,
@@ -34,7 +36,15 @@ export async function GET(request: Request) {
     })
 
     return NextResponse.json(response)
-  } catch {
+  } catch (error) {
+    const known = error as Partial<AuthError>
+    if (known.status) {
+      const payload = apiErrorSchema.parse({
+        error: known.message ?? "Ошибка авторизации",
+        code: known.code ?? "AUTH_ERROR",
+      })
+      return NextResponse.json(payload, { status: known.status })
+    }
     const payload = apiErrorSchema.parse({
       error: "Не удалось загрузить сотрудников",
       code: "INTERNAL_ERROR",

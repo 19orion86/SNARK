@@ -16,7 +16,10 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { useProfile } from '@/hooks/use-profile'
 import type { ProfileData } from '@/types/portal'
 
 const tabIconMap = {
@@ -29,6 +32,23 @@ const tabIconMap = {
 
 export function Profile({ data }: { data: ProfileData }) {
   const [activeTab, setActiveTab] = useState<ProfileData["tabs"][number]["id"]>('tasks')
+  const [firstName, setFirstName] = useState(data.firstName ?? data.fullName.split(" ")[0] ?? "")
+  const [lastName, setLastName] = useState(data.lastName ?? data.fullName.split(" ")[1] ?? "")
+  const [phone, setPhone] = useState(data.phone ?? "")
+  const [avatarUrl, setAvatarUrl] = useState(data.avatarUrl ?? "")
+  const [saving, setSaving] = useState(false)
+  const { update, error: profileError } = useProfile()
+
+  const handleSaveProfile = async () => {
+    setSaving(true)
+    await update({
+      firstName,
+      lastName,
+      phone: phone || undefined,
+      avatarUrl: avatarUrl || undefined,
+    })
+    setSaving(false)
+  }
 
   return (
     <div className="space-y-6">
@@ -102,6 +122,24 @@ export function Profile({ data }: { data: ProfileData }) {
             )
           })}
         </div>
+      </Card>
+
+      <Card className="p-4 md:p-6">
+        <h2 className="mb-4 font-bold text-card-foreground">Редактирование профиля</h2>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Input value={firstName} onChange={(event) => setFirstName(event.target.value)} placeholder="Имя" />
+          <Input value={lastName} onChange={(event) => setLastName(event.target.value)} placeholder="Фамилия" />
+          <Input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Телефон" />
+          <Input
+            value={avatarUrl}
+            onChange={(event) => setAvatarUrl(event.target.value)}
+            placeholder="URL аватара"
+          />
+        </div>
+        {profileError && <p className="mt-3 text-sm text-destructive">{profileError}</p>}
+        <Button type="button" className="mt-4" onClick={handleSaveProfile} disabled={saving}>
+          {saving ? "Сохранение..." : "Сохранить профиль"}
+        </Button>
       </Card>
 
       {/* Tab Content */}
