@@ -10,22 +10,13 @@ import {
   generateRefreshToken,
   REFRESH_TOKEN_COOKIE,
   REFRESH_TOKEN_TTL_SECONDS,
+  validateCookieConfig,
 } from "@/lib/auth/tokens"
 import { db } from "@/lib/db/client"
 import { users } from "@/lib/db/schema"
 import { loginSchema } from "@/lib/validators/auth"
 
 const INVALID_CREDENTIALS_MESSAGE = "Неверный email или пароль"
-
-function getCookieOptions(maxAge: number) {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge,
-  }
-}
 
 export async function POST(request: Request) {
   try {
@@ -98,8 +89,16 @@ export async function POST(request: Request) {
       role: user.role,
     })
 
-    response.cookies.set(REFRESH_TOKEN_COOKIE, refreshToken, getCookieOptions(REFRESH_TOKEN_TTL_SECONDS))
-    response.cookies.set(ACCESS_TOKEN_COOKIE, accessToken, getCookieOptions(ACCESS_TOKEN_TTL_SECONDS))
+    response.cookies.set(
+      REFRESH_TOKEN_COOKIE,
+      refreshToken,
+      validateCookieConfig(REFRESH_TOKEN_TTL_SECONDS)
+    )
+    response.cookies.set(
+      ACCESS_TOKEN_COOKIE,
+      accessToken,
+      validateCookieConfig(ACCESS_TOKEN_TTL_SECONDS)
+    )
 
     return response
   } catch {

@@ -5,6 +5,17 @@ export const ACCESS_TOKEN_COOKIE = "access_token"
 export const REFRESH_TOKEN_COOKIE = "refresh_token"
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60
 export const REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60
+let cookieConfigWarningShown = false
+
+type CookieSameSite = "lax" | "strict"
+
+export interface AuthCookieConfig {
+  httpOnly: true
+  secure: boolean
+  sameSite: CookieSameSite
+  path: "/"
+  maxAge: number
+}
 
 export interface AccessTokenPayload extends JwtPayload {
   userId: string
@@ -14,6 +25,39 @@ export interface AccessTokenPayload extends JwtPayload {
 
 export interface RefreshTokenPayload extends JwtPayload {
   userId: string
+}
+
+function getExpectedCookiePolicy() {
+  if (process.env.NODE_ENV === "production") {
+    return { secure: true, sameSite: "strict" as CookieSameSite, httpOnly: true as const }
+  }
+
+  return { secure: false, sameSite: "lax" as CookieSameSite, httpOnly: true as const }
+}
+
+export function validateCookieConfig(maxAge: number): AuthCookieConfig {
+  const expected = getExpectedCookiePolicy()
+  const config: AuthCookieConfig = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+    path: "/",
+    maxAge,
+  }
+
+  const isUnsafe =
+    config.httpOnly !== expected.httpOnly ||
+    config.secure !== expected.secure ||
+    config.sameSite !== expected.sameSite
+
+  if (isUnsafe && !cookieConfigWarningShown) {
+    cookieConfigWarningShown = true
+    console.warn(
+      `[auth] Небезопасная cookie-конфигурация: expected secure=${expected.secure}, sameSite=${expected.sameSite}, httpOnly=${expected.httpOnly}; got secure=${config.secure}, sameSite=${config.sameSite}, httpOnly=${config.httpOnly}`
+    )
+  }
+
+  return config
 }
 
 function getAccessSecret(): string {

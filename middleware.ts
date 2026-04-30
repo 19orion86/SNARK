@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
+import { jwtVerify } from "jose"
 import type { Session, UserRole } from "@/types/auth"
 import {
   ACCESS_TOKEN_COOKIE,
+  ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_COOKIE,
   type AccessTokenPayload,
-  verifyToken,
+  validateCookieConfig,
 } from "@/lib/auth/tokens"
 
 const PUBLIC_PATHS = ["/", "/login"]
@@ -82,7 +84,10 @@ async function tryRefresh(request: NextRequest): Promise<{
     return { payload: null, setCookie: null }
   }
 
-  const decoded = verifyToken<AccessTokenPayload>(responseBody.accessToken, "access")
+  const decoded = await verifyAccessTokenEdge(responseBody.accessToken)
+  if (!decoded) {
+    return { payload: null, setCookie: null }
+  }
   const payload: Session = {
     userId: decoded.userId,
     role: decoded.role,
@@ -97,6 +102,8 @@ async function tryRefresh(request: NextRequest): Promise<{
 }
 
 export async function middleware(request: NextRequest) {
+  validateCookieConfig(ACCESS_TOKEN_TTL_SECONDS)
+
   const { pathname } = request.nextUrl
 
   if (isPublicPath(pathname)) {
@@ -108,15 +115,15 @@ export async function middleware(request: NextRequest) {
   let propagatedSetCookie: string | null = null
 
   if (accessToken) {
-    try {
-      const verified = verifyToken<AccessTokenPayload>(accessToken, "access")
+    const verified = await verifyAccessTokenEdge(accessToken)
+    if (verified) {
       payload = {
         userId: verified.userId,
         role: verified.role,
         iat: verified.iat ?? 0,
         exp: verified.exp ?? 0,
       }
-    } catch {
+    } else {
       const refreshed = await tryRefresh(request)
       payload = refreshed.payload
       propagatedSetCookie = refreshed.setCookie
@@ -144,4 +151,28 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+}
+
+async function verifyAccessTokenEdge(token: string): Promise<AccessTokenPayload | null> {
+  const secret = process.env.JWT_ACCESS_SECRET
+  if (!secret) return null
+
+  try {
+    const encoder = new TextEncoder()
+    const { payload } = await jwtVerify(token, encoder.encode(secret))
+
+    if (typeof payload.userId !== "string") return null
+    if (typeof payload.email !== "string") return null
+    if (typeof payload.role !== "string") return null
+
+    return {
+      userId: payload.userId,
+      email: payload.email,
+      role: payload.role as UserRole,
+      iat: payload.iat,
+      exp: payload.exp,
+    }
+  } catch {
+    return null
+  }
 }

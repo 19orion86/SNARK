@@ -7,20 +7,11 @@ import {
   generateRefreshToken,
   REFRESH_TOKEN_COOKIE,
   REFRESH_TOKEN_TTL_SECONDS,
+  validateCookieConfig,
   verifyToken,
   type RefreshTokenPayload,
 } from "@/lib/auth/tokens"
 import { getRefreshTokenExpiryDate, rotateSession, validateSession } from "@/lib/auth/session"
-
-function getCookieOptions(maxAge: number) {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge,
-  }
-}
 
 function unauthorizedResponse() {
   const response = NextResponse.json({ error: "Сессия недействительна" }, { status: 401 })
@@ -85,12 +76,12 @@ export async function POST(request: Request) {
     response.cookies.set(
       REFRESH_TOKEN_COOKIE,
       nextRefreshToken,
-      getCookieOptions(REFRESH_TOKEN_TTL_SECONDS)
+      validateCookieConfig(REFRESH_TOKEN_TTL_SECONDS)
     )
     response.cookies.set(
       ACCESS_TOKEN_COOKIE,
       nextAccessToken,
-      getCookieOptions(ACCESS_TOKEN_TTL_SECONDS)
+      validateCookieConfig(ACCESS_TOKEN_TTL_SECONDS)
     )
 
     return response

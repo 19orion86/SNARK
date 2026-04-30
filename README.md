@@ -24,6 +24,26 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Windows: DB Commands (PowerShell)
+
+If `pnpm db:migrate` fails in Cursor terminal with errors like `"pnpm" is not recognized` or `"node" is not recognized`, prepare the shell environment first:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "scripts/dev-shell.ps1"
+```
+
+Then run DB commands as usual:
+
+```powershell
+pnpm db:migrate
+pnpm db:generate
+pnpm db:studio
+```
+
+The helper script:
+- ensures `pnpm` and `node` are available in `PATH`,
+- loads `DATABASE_URL` from `.env.local` when needed.
+
 ## Learn More
 
 To learn more, take a look at the following resources:
