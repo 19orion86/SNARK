@@ -3,16 +3,11 @@ import { Dashboard } from "@/components/pages/dashboard"
 import { EmployeeDirectory } from "@/components/pages/employee-directory"
 import { Documents } from "@/components/pages/documents"
 import { Profile } from "@/components/pages/profile"
-import {
-  loadContactsData,
-  loadDashboardData,
-  loadDocumentsData,
-  loadProfileData,
-} from "@/lib/portal-data/loaders"
+import { mockPortalRepository } from "@/lib/repositories/portal-repository.mock"
 
 describe("Home smoke", () => {
   it("renders dashboard content", async () => {
-    const data = await loadDashboardData()
+    const data = await mockPortalRepository.getDashboardData()
     render(<Dashboard data={data} />)
 
     expect(screen.getByText("Добрый день, Иван!")).toBeInTheDocument()
@@ -20,7 +15,7 @@ describe("Home smoke", () => {
   })
 
   it("renders employee directory", async () => {
-    const data = await loadContactsData()
+    const data = await mockPortalRepository.getContactsData()
     render(<EmployeeDirectory data={data} />)
 
     expect(screen.getByText("Справочник сотрудников")).toBeInTheDocument()
@@ -28,11 +23,11 @@ describe("Home smoke", () => {
   })
 
   it("renders documents and profile sections", async () => {
-    const documentsData = await loadDocumentsData()
+    const documentsData = await mockPortalRepository.getDocumentsData()
     render(<Documents data={documentsData} />)
     expect(screen.getByRole("heading", { name: "Документы" })).toBeInTheDocument()
 
-    const profileData = await loadProfileData()
+    const profileData = await mockPortalRepository.getProfileData()
     render(<Profile data={profileData} />)
     expect(screen.getByRole("heading", { name: "Иван Петров" })).toBeInTheDocument()
     expect(screen.getByText("Мои задачи")).toBeInTheDocument()

@@ -1,23 +1,30 @@
 import "server-only"
-import { getPortalRepository } from "@/lib/repositories/portal-repository"
-import type { ContactsData, DashboardData, DocumentsData, ProfileData, SidebarItem } from "@/types/portal"
+import { getPortalRepositoryServer } from "@/lib/repositories/portal-repository.server"
+import type {
+  ContactsData,
+  DashboardData,
+  DocumentsData,
+  EmployeesQuery,
+  ProfileData,
+  SidebarItem,
+} from "@/types/portal"
 
 export async function loadDashboardData(): Promise<DashboardData> {
-  return getPortalRepository().getDashboardData()
+  return getPortalRepositoryServer().getDashboardData()
 }
 
-export async function loadContactsData(): Promise<ContactsData> {
-  return getPortalRepository().getContactsData()
+export async function loadContactsData(query?: EmployeesQuery): Promise<ContactsData> {
+  return getPortalRepositoryServer().getContactsData(query)
 }
 
 export async function loadDocumentsData(): Promise<DocumentsData> {
-  return getPortalRepository().getDocumentsData()
+  return getPortalRepositoryServer().getDocumentsData()
 }
 
 export async function loadProfileData(): Promise<ProfileData> {
-  return getPortalRepository().getProfileData()
+  return getPortalRepositoryServer().getProfileData()
 }
 
 export async function loadSidebarItems(): Promise<SidebarItem[]> {
-  return getPortalRepository().getSidebarItems()
+  return getPortalRepositoryServer().getSidebarItems()
 }

@@ -54,9 +54,36 @@ export interface Employee {
   avatar: string
 }
 
+export interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page: number
+  limit: number
+}
+
+export interface ApiError {
+  error: string
+  code?: string
+  details?: string
+}
+
+export interface EmployeesQuery {
+  search?: string
+  department?: string
+  page?: number
+  limit?: number
+}
+
+export type EmployeesResponse = PaginatedResponse<Employee> & {
+  departments: string[]
+}
+
 export interface ContactsData {
   employees: Employee[]
   departments: string[]
+  total?: number
+  page?: number
+  limit?: number
 }
 
 export interface DocumentItem {
