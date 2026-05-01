@@ -166,7 +166,7 @@ async def process_participants(
         "Отправьте аудио или видео записи совещания <b>как документ</b>.\n\n"
         "Аудио: MP3, WAV, OGG, M4A, WEBM, OPUS.\n"
         "Видео: MP4, MOV, MKV и др. (звук будет извлечён в MP3 на сервере, нужен ffmpeg).\n"
-        "Максимальный размер: 200 МБ (требуется Local Bot API Server для файлов >20 МБ)",
+        "Максимальный размер: 2 ГБ (требуется Local Bot API Server для файлов >20 МБ)",
         parse_mode="HTML",
     )
 
@@ -203,8 +203,8 @@ async def process_audio_file(
         )
         return
 
-    if document.file_size and document.file_size > 200 * 1024 * 1024:
-        await message.answer("Файл слишком большой. Максимум — 200 МБ.")
+    if document.file_size and document.file_size > 2 * 1024 * 1024 * 1024:
+        await message.answer("Файл слишком большой. Максимум — 2 ГБ.")
         return
 
     await message.answer("Файл получен. Начинаю обработку...")

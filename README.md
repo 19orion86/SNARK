@@ -139,6 +139,9 @@ API (FastAPI):
 
 ```bash
 uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+
+# Удобный веб-интерфейс загрузки и сравнения:
+# http://localhost:8000/
 ```
 
 Telegram-бот (Aiogram):
@@ -189,6 +192,10 @@ bot = Bot(token=token, session=session)
 - `meeting_date` — дата (YYYY-MM-DD)
 - `participants` — строка через запятую
 - `source` — `web` (по умолчанию)
+
+Полезные endpoint'ы:
+- `GET /api/v1/protocols/{id}` — детали протокола (включая `transcript_text` и `protocol_text`)
+- `GET /api/v1/protocols/{id}/export-docx` — скачать готовый протокол в `.docx`
 
 ## Важно про 1С-коннектор
 

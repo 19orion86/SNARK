@@ -11,21 +11,26 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date
+from io import BytesIO
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import quote
 
 import structlog
 from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
+from docx import Document
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.celery_app import celery_app
 from src.core.config import settings
 from src.core.database import get_async_session
-from src.core.security import encrypt_file
-from src.modules.protocols.models import ActionItemStatus, ProtocolStatus
+from src.core.security import decrypt_data, encrypt_file
+from src.modules.protocols.models import ActionItemStatus, MeetingProtocol, ProtocolStatus
 from src.modules.protocols.repository import ProtocolRepository
 from src.modules.protocols.schemas import (
     ActionItemStatusEnum,
@@ -49,7 +54,89 @@ router = APIRouter(
     tags=["protocols"],
 )
 
-MAX_FILE_SIZE = 200 * 1024 * 1024
+MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024
+
+
+def _safe_docx_name(title: str, protocol_id: int) -> str:
+    sanitized = re.sub(r"[^\w\-. ]+", "_", title, flags=re.UNICODE).strip()
+    if not sanitized:
+        sanitized = f"protocol_{protocol_id}"
+    return f"{sanitized[:80]}.docx"
+
+
+def _content_disposition_docx(filename: str) -> str:
+    ascii_fallback = re.sub(r"[^A-Za-z0-9._-]+", "_", filename).strip("._")
+    if not ascii_fallback:
+        ascii_fallback = "protocol.docx"
+    if not ascii_fallback.lower().endswith(".docx"):
+        ascii_fallback += ".docx"
+    quoted_utf8_name = quote(filename, safe="")
+    return (
+        f'attachment; filename="{ascii_fallback}"; '
+        f"filename*=UTF-8''{quoted_utf8_name}"
+    )
+
+
+def _build_protocol_docx(
+    protocol: MeetingProtocol,
+    transcript_text: str | None,
+) -> bytes:
+    document = Document()
+    document.add_heading("Протокол совещания", level=1)
+    document.add_paragraph(f"Название: {protocol.title}")
+    document.add_paragraph(f"Дата: {protocol.meeting_date}")
+    participants = ", ".join(protocol.participants or []) or "Не указаны"
+    document.add_paragraph(f"Участники: {participants}")
+    document.add_paragraph(f"Статус: {protocol.status.value}")
+
+    if protocol.protocol_text:
+        document.add_heading("Готовый протокол", level=2)
+        document.add_paragraph(protocol.protocol_text)
+
+    if protocol.agenda:
+        document.add_heading("Повестка", level=2)
+        for item in protocol.agenda:
+            document.add_paragraph(str(item), style="List Bullet")
+
+    if protocol.decisions:
+        document.add_heading("Принятые решения", level=2)
+        for item in protocol.decisions:
+            document.add_paragraph(str(item), style="List Number")
+
+    if protocol.action_items:
+        document.add_heading("Поручения", level=2)
+        for idx, item in enumerate(protocol.action_items, 1):
+            deadline = str(item.deadline) if item.deadline else "не указан"
+            document.add_paragraph(
+                f"{idx}. {item.text}\n"
+                f"Ответственный: {item.assignee}\n"
+                f"Срок: {deadline}\n"
+                f"Приоритет: {item.priority.value}\n"
+                f"Статус: {item.status.value}",
+            )
+
+    if protocol.tone_analysis:
+        document.add_heading("Анализ тональности", level=2)
+        document.add_paragraph(
+            f"Оценка: {protocol.tone_analysis.overall_score}/10"
+        )
+        document.add_paragraph(
+            "Соответствие корпоративной культуре: "
+            + ("Да" if protocol.tone_analysis.is_compliant else "Нет")
+        )
+        if protocol.tone_analysis.recommendations:
+            document.add_paragraph("Рекомендации:")
+            for rec in protocol.tone_analysis.recommendations:
+                document.add_paragraph(str(rec), style="List Bullet")
+
+    if transcript_text:
+        document.add_heading("Транскрибация", level=2)
+        document.add_paragraph(transcript_text)
+
+    buffer = BytesIO()
+    document.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
 
 
 @router.post(
@@ -125,13 +212,6 @@ async def upload_meeting_audio(
             ),
         )
 
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Файл слишком большой. Максимум: {MAX_FILE_SIZE // (1024*1024)} МБ",
-        )
-
     meetings_dir = settings.meetings_dir
     meetings_dir.mkdir(parents=True, exist_ok=True)
 
@@ -140,7 +220,30 @@ async def upload_meeting_audio(
     to_encrypt: Path | None = None
 
     try:
-        temp_path.write_bytes(content)
+        total_size = 0
+        chunk_size = 1024 * 1024
+        with temp_path.open("wb") as temp_file:
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > MAX_FILE_SIZE:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=(
+                            "Файл слишком большой. "
+                            f"Максимум: {MAX_FILE_SIZE // (1024 * 1024)} МБ"
+                        ),
+                    )
+                temp_file.write(chunk)
+
+        if total_size == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Файл пустой",
+            )
+
         try:
             to_encrypt, enc_suffix = prepare_temp_file_for_encryption(
                 temp_path,
@@ -442,4 +545,54 @@ async def get_protocol_detail(
             detail=f"Протокол #{protocol_id} не найден",
         )
 
-    return ProtocolResponseSchema.model_validate(protocol)
+    response = ProtocolResponseSchema.model_validate(protocol)
+    if protocol.transcript_encrypted:
+        try:
+            response.transcript_text = decrypt_data(protocol.transcript_encrypted)
+        except Exception:
+            logger.warning(
+                "Не удалось расшифровать transcript_encrypted",
+                protocol_id=protocol_id,
+            )
+    return response
+
+
+@router.get(
+    "/{protocol_id}/export-docx",
+    summary="Скачать протокол в формате DOCX",
+)
+async def export_protocol_docx(
+    protocol_id: int,
+    session: AsyncSession = Depends(get_async_session),
+) -> StreamingResponse:
+    """Скачать готовый протокол совещания в формате DOCX."""
+    repo = ProtocolRepository(session)
+    protocol = await repo.get_protocol_by_id(protocol_id)
+    if not protocol:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Протокол #{protocol_id} не найден",
+        )
+
+    transcript_text: str | None = None
+    if protocol.transcript_encrypted:
+        try:
+            transcript_text = decrypt_data(protocol.transcript_encrypted)
+        except Exception:
+            logger.warning(
+                "Не удалось расшифровать transcript_encrypted для DOCX",
+                protocol_id=protocol_id,
+            )
+
+    docx_bytes = _build_protocol_docx(protocol, transcript_text)
+    filename = _safe_docx_name(protocol.title, protocol_id)
+    headers = {
+        "Content-Disposition": _content_disposition_docx(filename),
+    }
+    return StreamingResponse(
+        content=BytesIO(docx_bytes),
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        headers=headers,
+    )

@@ -442,6 +442,7 @@ class ProtocolResponseSchema(BaseModel):
         participants: участники.
         status: статус обработки.
         protocol_text: текст протокола.
+        transcript_text: расшифрованный текст транскрипции.
         agenda: повестка.
         decisions: решения.
         action_items: поручения.
@@ -460,6 +461,7 @@ class ProtocolResponseSchema(BaseModel):
     source: str
     status: ProtocolStatusEnum
     protocol_text: str | None = None
+    transcript_text: str | None = None
     agenda: list | None = None
     decisions: list | None = None
     action_items: list[ActionItemResponseSchema] = []
