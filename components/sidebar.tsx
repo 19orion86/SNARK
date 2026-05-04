@@ -9,6 +9,7 @@ import {
   Calendar,
   HelpCircle,
   BookOpen,
+  Newspaper,
   ShieldCheck,
   LogOut,
   ChevronRight,
@@ -44,6 +45,7 @@ const iconMap = {
   Calendar,
   HelpCircle,
   BookOpen,
+  Newspaper,
 } as const
 
 function getIcon(iconName: SidebarItem["icon"]) {

@@ -37,6 +37,6 @@ describe("Home smoke", () => {
     const profileData = await mockPortalRepository.getProfileData()
     render(<Profile data={profileData} />)
     expect(screen.getByRole("heading", { name: "Иван Петров" })).toBeInTheDocument()
-    expect(screen.getByText("Мои задачи")).toBeInTheDocument()
+    expect(screen.getByText("Мой профиль")).toBeInTheDocument()
   })
 })

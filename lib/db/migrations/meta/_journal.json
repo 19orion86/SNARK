@@ -15,6 +15,13 @@
       "when": 1777561987530,
       "tag": "0001_legal_moon_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777895018300,
+      "tag": "0002_calm_slipstream",
+      "breakpoints": true
     }
   ]
 }

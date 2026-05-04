@@ -7,11 +7,17 @@ export interface QuickAction {
 }
 
 export interface NewsItem {
-  id: number
+  id: string
   title: string
-  date: string
+  body: string
   category: string
-  isUrgent: boolean
+  coverUrl?: string | null
+  isPinned: boolean
+  status: "draft" | "published"
+  authorId?: string | null
+  publishedAt?: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export interface BirthdayPerson {
@@ -52,6 +58,15 @@ export interface Employee {
   office: string
   status: "online" | "away" | "offline"
   avatar: string
+}
+
+export interface Department {
+  id: string
+  name: string
+  description?: string | null
+  headUserId?: string | null
+  parentId?: string | null
+  createdAt: string
 }
 
 export interface PaginatedResponse<T> {
@@ -122,7 +137,7 @@ export type DocumentsResponse = PaginatedResponse<DocumentItem> & {
 }
 
 export interface ProfileTab {
-  id: "tasks" | "vacation" | "evaluations" | "kpi" | "payslips"
+  id: "my_profile" | "my_department" | "documents" | "vacation"
   label: string
   icon: string
 }
@@ -137,12 +152,14 @@ export interface ProfileTask {
 }
 
 export interface VacationItem {
-  id: number
-  start: string
-  end: string
-  days: number
+  id: string
+  userId: string
+  startDate: string
+  endDate: string
+  daysTotal: number
+  daysRemaining: number
   status: "approved" | "pending"
-  type: string
+  createdAt: string
 }
 
 export interface ProfileData {
@@ -159,18 +176,58 @@ export interface ProfileData {
   email: string
   office: string
   avatarUrl?: string
-  presence: "office" | "away" | "offline"
-  tabs: ProfileTab[]
-  tasks: ProfileTask[]
+  positionTitle?: string
+  presence: "office" | "remote" | "vacation"
+  legacyPresence?: "office" | "away" | "offline"
+  tabs?: ProfileTab[]
+  profileTab?: {
+    status: "office" | "remote" | "vacation"
+  }
+  departmentTab?: {
+    departmentName: string
+    manager?: {
+      id: string
+      fullName: string
+    } | null
+    regulationsDoc?: {
+      id: string
+      title: string
+      downloadUrl?: string
+    } | null
+    standardsDoc?: {
+      id: string
+      title: string
+      downloadUrl?: string
+    } | null
+  }
+  documentsTab?: {
+    jobInstruction?: {
+      id: string
+      title: string
+      downloadUrl?: string
+    } | null
+  }
+  vacationTab?: {
+    daysRemaining: number
+    nextVacation?: {
+      startDate: string
+      endDate: string
+      daysUntil: number
+    } | null
+    history: VacationItem[]
+  }
+  tasks?: ProfileTask[]
   vacations: VacationItem[]
-  payslips: string[]
+  payslips?: string[]
 }
 
 export interface ProfileUpdatePayload {
-  firstName: string
-  lastName: string
   phone?: string
   avatarUrl?: string
+}
+
+export interface ProfilePresenceUpdatePayload {
+  presence: "office" | "remote" | "vacation"
 }
 
 export interface CurrentUserResponse {
@@ -202,4 +259,108 @@ export interface SidebarItem {
   description?: string
   href: string
   roles?: UserRole[]
+}
+
+export interface AdminEmployeeItem {
+  id: string
+  fullName: string
+  firstName: string
+  lastName: string
+  middleName?: string | null
+  positionTitle: string
+  departmentId?: string | null
+  departmentName: string
+  phone?: string | null
+  email: string
+  birthDate?: string | null
+  startDate?: string | null
+  welcomeNote?: string | null
+  status: "active" | "vacation" | "remote" | "dismissed"
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AdminEmployeesResponse {
+  items: AdminEmployeeItem[]
+}
+
+export interface AdminEmployeeUpsertPayload {
+  fullName: string
+  positionTitle: string
+  departmentName: string
+  phone?: string
+  email: string
+  birthDate?: string
+  startDate?: string
+  welcomeNote?: string
+  status?: "active" | "vacation" | "remote" | "dismissed"
+}
+
+export interface EmployeeImportErrorItem {
+  row: number
+  reason: string
+}
+
+export interface EmployeeImportResult {
+  created: number
+  updated: number
+  errors: EmployeeImportErrorItem[]
+}
+
+export type NewsCategory = "company" | "projects" | "people" | "important"
+export type NewsStatus = "draft" | "published"
+
+export interface NewsListQuery {
+  category?: "all" | NewsCategory
+  page?: number
+  limit?: number
+}
+
+export interface NewsListItem {
+  id: string
+  title: string
+  body: string
+  category: NewsCategory
+  coverUrl?: string | null
+  isPinned: boolean
+  status: NewsStatus
+  authorId?: string | null
+  authorName: string
+  publishedAt?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NewsListResponse {
+  items: NewsListItem[]
+  total: number
+  page: number
+  limit: number
+}
+
+export interface NewsDetailResponse {
+  item: NewsListItem | null
+}
+
+export interface NewsEditorPayload {
+  title: string
+  body: string
+  category: NewsCategory
+  coverUrl?: string
+  isPinned?: boolean
+  status?: NewsStatus
+  publishedAt?: string
+}
+
+export interface NewsCoverUploadPayload {
+  fileName: string
+  contentType: string
+}
+
+export interface NewsCoverUploadResponse {
+  uploadUrl: string
+  objectKey: string
+  fileUrl: string
+  expiresAt: string
 }

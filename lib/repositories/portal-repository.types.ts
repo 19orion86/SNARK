@@ -1,12 +1,21 @@
 import type {
+  AdminEmployeeItem,
+  AdminEmployeeUpsertPayload,
+  AdminEmployeesResponse,
   ContactsData,
   DashboardData,
   DocumentMetadataCreatePayload,
   DocumentMetadataCreateResponse,
   DocumentsQuery,
   DocumentsData,
+  EmployeeImportResult,
   EmployeesQuery,
+  NewsDetailResponse,
+  NewsEditorPayload,
+  NewsListQuery,
+  NewsListResponse,
   ProfileData,
+  ProfilePresenceUpdatePayload,
   ProfileUpdatePayload,
   SidebarItem,
 } from "@/types/portal"
@@ -23,5 +32,16 @@ export interface PortalRepository {
   getProfileData(userId?: string): Promise<ProfileData>
   getCurrentUserProfile(userId: string): Promise<ProfileData | null>
   updateProfile(userId: string, payload: ProfileUpdatePayload): Promise<ProfileData>
+  updateMyPresence(userId: string, payload: ProfilePresenceUpdatePayload): Promise<ProfileData>
+  listAdminEmployees(): Promise<AdminEmployeesResponse>
+  createAdminEmployee(payload: AdminEmployeeUpsertPayload): Promise<AdminEmployeeItem>
+  updateAdminEmployee(id: string, payload: AdminEmployeeUpsertPayload): Promise<AdminEmployeeItem>
+  hideAdminEmployee(id: string, hidden: boolean): Promise<AdminEmployeeItem>
+  importEmployees(rows: AdminEmployeeUpsertPayload[]): Promise<EmployeeImportResult>
+  getNewsList(query?: NewsListQuery, includeDrafts?: boolean): Promise<NewsListResponse>
+  getNewsById(id: string, includeDrafts?: boolean): Promise<NewsDetailResponse>
+  createNews(payload: NewsEditorPayload & { authorId: string }): Promise<NewsDetailResponse["item"]>
+  updateNews(id: string, payload: NewsEditorPayload): Promise<NewsDetailResponse["item"]>
+  deleteNews(id: string): Promise<void>
   getSidebarItems(): Promise<SidebarItem[]>
 }

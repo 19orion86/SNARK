@@ -7,10 +7,18 @@ import {
   mapSidebarItems,
 } from "@/lib/mappers/portal"
 import type {
+  AdminEmployeeItem,
+  AdminEmployeeUpsertPayload,
   DocumentMetadataCreatePayload,
   EmployeesQuery,
+  EmployeeImportResult,
   DocumentsQuery,
+  NewsDetailResponse,
+  NewsEditorPayload,
+  NewsListQuery,
+  NewsListResponse,
   ProfileData,
+  ProfilePresenceUpdatePayload,
   ProfileUpdatePayload,
 } from "@/types/portal"
 
@@ -34,13 +42,17 @@ function defaultProfileData(): ProfileData {
     office: "Головной офис, каб. 301",
     avatarUrl: undefined,
     presence: "office",
+    legacyPresence: "office",
     tabs: [
-      { id: "tasks", label: "Задачи", icon: "CheckCircle" },
+      { id: "my_profile", label: "Мой профиль", icon: "User" },
+      { id: "my_department", label: "Моё подразделение", icon: "Building2" },
+      { id: "documents", label: "Документы", icon: "FileText" },
       { id: "vacation", label: "Отпуск", icon: "Calendar" },
-      { id: "evaluations", label: "Оценки", icon: "Award" },
-      { id: "kpi", label: "KPI / РМТО", icon: "Wallet" },
-      { id: "payslips", label: "Расчётные листы", icon: "FileText" },
     ],
+    profileTab: { status: "office" },
+    departmentTab: { departmentName: "СНАРК | Инжиниринг", manager: null, regulationsDoc: null, standardsDoc: null },
+    documentsTab: { jobInstruction: null },
+    vacationTab: { daysRemaining: 14, nextVacation: null, history: [] },
     tasks: [
       {
         id: 1,
@@ -60,12 +72,61 @@ function defaultProfileData(): ProfileData {
       },
     ],
     vacations: [
-      { id: 1, start: "15.06.2024", end: "28.06.2024", days: 14, status: "approved", type: "Ежегодный" },
-      { id: 2, start: "23.12.2024", end: "08.01.2025", days: 14, status: "pending", type: "Ежегодный" },
+      {
+        id: "vacation-1",
+        userId: "mock-user-1",
+        startDate: "2024-06-15",
+        endDate: "2024-06-28",
+        daysTotal: 14,
+        daysRemaining: 14,
+        status: "approved",
+        createdAt: "2024-01-10T09:00:00.000Z",
+      },
+      {
+        id: "vacation-2",
+        userId: "mock-user-1",
+        startDate: "2024-12-23",
+        endDate: "2025-01-08",
+        daysTotal: 14,
+        daysRemaining: 0,
+        status: "pending",
+        createdAt: "2024-02-15T09:00:00.000Z",
+      },
     ],
     payslips: ["Апрель 2024", "Март 2024", "Февраль 2024", "Январь 2024"],
   }
 }
+
+const mockNewsItems: NewsListResponse["items"] = [
+  {
+    id: "news-1",
+    title: "Запущен новый проект по модернизации контактной сети в Казани",
+    body: "Короткий анонс: сформирована команда проекта, утвержден график работ.",
+    category: "projects",
+    coverUrl: null,
+    isPinned: false,
+    status: "published",
+    authorId: "mock-user-1",
+    authorName: "Петров Иван",
+    publishedAt: "2026-04-30T09:00:00.000Z",
+    createdAt: "2026-04-29T09:00:00.000Z",
+    updatedAt: "2026-04-30T09:00:00.000Z",
+  },
+  {
+    id: "news-2",
+    title: "Плановое техническое обслуживание корпоративных систем",
+    body: "В указанный период возможны кратковременные перерывы в работе внутренних сервисов.",
+    category: "important",
+    coverUrl: null,
+    isPinned: true,
+    status: "published",
+    authorId: "mock-user-1",
+    authorName: "Петров Иван",
+    publishedAt: "2026-04-27T09:00:00.000Z",
+    createdAt: "2026-04-26T09:00:00.000Z",
+    updatedAt: "2026-04-27T09:00:00.000Z",
+  },
+]
 
 export const mockPortalRepository: PortalRepository = {
   async getDashboardData() {
@@ -82,32 +143,56 @@ export const mockPortalRepository: PortalRepository = {
       ],
       recentNews: [
         {
-          id: 1,
+          id: "news-1",
           title: "Запущен новый проект по модернизации контактной сети в Казани",
-          date: "2 дня назад",
+          body: "Короткий анонс: сформирована команда проекта, утвержден график работ.",
           category: "Проект",
-          isUrgent: false,
+          coverUrl: null,
+          isPinned: false,
+          status: "published",
+          authorId: "mock-user-1",
+          publishedAt: "2026-04-30T09:00:00.000Z",
+          createdAt: "2026-04-29T09:00:00.000Z",
+          updatedAt: "2026-04-30T09:00:00.000Z",
         },
         {
-          id: 2,
+          id: "news-2",
           title: "Плановое техническое обслуживание корпоративных систем 15-17 мая",
-          date: "5 дней назад",
+          body: "В указанный период возможны кратковременные перерывы в работе внутренних сервисов.",
           category: "Объявление",
-          isUrgent: true,
+          coverUrl: null,
+          isPinned: true,
+          status: "published",
+          authorId: "mock-user-1",
+          publishedAt: "2026-04-27T09:00:00.000Z",
+          createdAt: "2026-04-26T09:00:00.000Z",
+          updatedAt: "2026-04-27T09:00:00.000Z",
         },
         {
-          id: 3,
+          id: "news-3",
           title: "Результаты квартального совещания руководителей подразделений",
-          date: "1 неделю назад",
+          body: "Опубликованы ключевые решения по производственным и административным инициативам.",
           category: "Отчёт",
-          isUrgent: false,
+          coverUrl: null,
+          isPinned: false,
+          status: "published",
+          authorId: "mock-user-1",
+          publishedAt: "2026-04-24T09:00:00.000Z",
+          createdAt: "2026-04-23T09:00:00.000Z",
+          updatedAt: "2026-04-24T09:00:00.000Z",
         },
         {
-          id: 4,
+          id: "news-4",
           title: "Приглашение на корпоративный праздник День энергетика",
-          date: "1 неделю назад",
+          body: "Регистрация открыта в разделе корпоративной культуры до конца недели.",
           category: "Событие",
-          isUrgent: false,
+          coverUrl: null,
+          isPinned: false,
+          status: "published",
+          authorId: "mock-user-1",
+          publishedAt: "2026-04-22T09:00:00.000Z",
+          createdAt: "2026-04-21T09:00:00.000Z",
+          updatedAt: "2026-04-22T09:00:00.000Z",
         },
       ],
       todayBirthdays: [
@@ -294,20 +379,187 @@ export const mockPortalRepository: PortalRepository = {
     const current = defaultProfileData()
     const next = {
       ...current,
-      firstName: payload.firstName,
-      lastName: payload.lastName,
-      fullName: `${payload.firstName} ${payload.lastName}`,
-      initials: `${payload.firstName.charAt(0)}${payload.lastName.charAt(0)}`.toUpperCase(),
       phone: payload.phone ?? current.phone,
       avatarUrl: payload.avatarUrl ?? current.avatarUrl,
     }
     return mapProfileData(next)
   },
 
+  async updateMyPresence(_userId: string, payload: ProfilePresenceUpdatePayload) {
+    await delay()
+    const current = defaultProfileData()
+    const legacyPresence = payload.presence === "remote" ? "offline" : payload.presence === "vacation" ? "away" : "office"
+    return mapProfileData({
+      ...current,
+      presence: payload.presence,
+      legacyPresence,
+      profileTab: {
+        status: payload.presence,
+      },
+    })
+  },
+
+  async listAdminEmployees() {
+    await delay()
+    const base = defaultProfileData()
+    const items: AdminEmployeeItem[] = [
+      {
+        id: "mock-user-1",
+        fullName: base.fullName,
+        firstName: base.firstName ?? "Иван",
+        lastName: base.lastName ?? "Петров",
+        middleName: null,
+        positionTitle: base.roleTitle,
+        departmentId: "dept-mock-1",
+        departmentName: base.department,
+        phone: base.phone,
+        email: base.email,
+        birthDate: "1990-01-10",
+        startDate: "2020-09-01",
+        welcomeNote: "Добро пожаловать в команду.",
+        status: "active",
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ]
+    return { items }
+  },
+
+  async createAdminEmployee(payload: AdminEmployeeUpsertPayload) {
+    await delay()
+    return {
+      id: `mock-user-${Date.now()}`,
+      fullName: payload.fullName,
+      firstName: payload.fullName.split(" ")[1] ?? payload.fullName,
+      lastName: payload.fullName.split(" ")[0] ?? payload.fullName,
+      middleName: null,
+      positionTitle: payload.positionTitle,
+      departmentId: null,
+      departmentName: payload.departmentName,
+      phone: payload.phone ?? null,
+      email: payload.email,
+      birthDate: payload.birthDate ?? null,
+      startDate: payload.startDate ?? null,
+      welcomeNote: payload.welcomeNote ?? null,
+      status: payload.status ?? "active",
+      isActive: payload.status !== "dismissed",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+  },
+
+  async updateAdminEmployee(id: string, payload: AdminEmployeeUpsertPayload) {
+    await delay()
+    const created = await this.createAdminEmployee(payload)
+    return { ...created, id }
+  },
+
+  async hideAdminEmployee(id: string, hidden: boolean) {
+    await delay()
+    const items = await this.listAdminEmployees()
+    const item = items.items[0]
+    return {
+      ...item,
+      id,
+      isActive: !hidden,
+      status: hidden ? "dismissed" : "active",
+      updatedAt: new Date().toISOString(),
+    }
+  },
+
+  async importEmployees(rows: AdminEmployeeUpsertPayload[]): Promise<EmployeeImportResult> {
+    await delay()
+    let created = 0
+    let updated = 0
+    const errors: EmployeeImportResult["errors"] = []
+    rows.forEach((row, idx) => {
+      if (!row.email.includes("@")) {
+        errors.push({ row: idx + 2, reason: "Некорректный email" })
+      } else if (row.email.includes("existing")) {
+        updated += 1
+      } else {
+        created += 1
+      }
+    })
+    return { created, updated, errors }
+  },
+
+  async getNewsList(query?: NewsListQuery, includeDrafts = false): Promise<NewsListResponse> {
+    await delay()
+    const page = query?.page ?? 1
+    const limit = query?.limit ?? 10
+    const category = query?.category && query.category !== "all" ? query.category : undefined
+    const filtered = mockNewsItems.filter((item) => {
+      const statusPass = includeDrafts ? true : item.status === "published"
+      const categoryPass = category ? item.category === category : true
+      return statusPass && categoryPass
+    })
+    const sorted = [...filtered].sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1
+      return new Date(b.publishedAt ?? b.createdAt).getTime() - new Date(a.publishedAt ?? a.createdAt).getTime()
+    })
+    const start = (page - 1) * limit
+    return {
+      items: sorted.slice(start, start + limit),
+      total: sorted.length,
+      page,
+      limit,
+    }
+  },
+
+  async getNewsById(id: string, includeDrafts = false): Promise<NewsDetailResponse> {
+    await delay()
+    const item = mockNewsItems.find((entry) => entry.id === id) ?? null
+    if (!item) return { item: null }
+    if (!includeDrafts && item.status !== "published") return { item: null }
+    return { item }
+  },
+
+  async createNews(payload: NewsEditorPayload & { authorId: string }) {
+    await delay()
+    return {
+      id: `news-${Date.now()}`,
+      title: payload.title,
+      body: payload.body,
+      category: payload.category,
+      coverUrl: payload.coverUrl ?? null,
+      isPinned: payload.isPinned ?? false,
+      status: payload.status ?? "draft",
+      authorId: payload.authorId,
+      authorName: "Петров Иван",
+      publishedAt: payload.status === "published" ? new Date().toISOString() : null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+  },
+
+  async updateNews(id: string, payload: NewsEditorPayload) {
+    await delay()
+    const existing = mockNewsItems.find((entry) => entry.id === id)
+    if (!existing) return null
+    return {
+      ...existing,
+      title: payload.title,
+      body: payload.body,
+      category: payload.category,
+      coverUrl: payload.coverUrl ?? null,
+      isPinned: payload.isPinned ?? false,
+      status: payload.status ?? "draft",
+      publishedAt: payload.status === "published" ? new Date().toISOString() : null,
+      updatedAt: new Date().toISOString(),
+    }
+  },
+
+  async deleteNews(_id: string): Promise<void> {
+    await delay(20)
+  },
+
   async getSidebarItems() {
     await delay(20)
     return mapSidebarItems([
       { id: "dashboard", label: "Главная", icon: "LayoutDashboard", description: "Дашборд", href: "/dashboard" },
+      { id: "news", label: "Новости", icon: "Newspaper", description: "Лента новостей", href: "/news" },
       { id: "contacts", label: "Сотрудники", icon: "Users", description: "Справочник", href: "/contacts" },
       { id: "documents", label: "Документы", icon: "FileText", description: "Нормативная база", href: "/documents" },
       { id: "profile", label: "Мой профиль", icon: "User", description: "Личный кабинет", href: "/profile" },

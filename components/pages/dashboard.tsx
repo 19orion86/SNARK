@@ -107,10 +107,12 @@ export function Dashboard({ data }: { data: DashboardData }) {
                       {news.title}
                     </h3>
                     <div className="mt-2 flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">{news.date}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {news.publishedAt ?? news.createdAt}
+                      </span>
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          news.isUrgent
+                          news.isPinned
                             ? 'bg-destructive/10 text-destructive'
                             : 'bg-success/10 text-success'
                         }`}

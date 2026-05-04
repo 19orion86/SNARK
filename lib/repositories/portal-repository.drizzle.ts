@@ -1,17 +1,27 @@
 import "server-only"
-import { and, count, eq, ilike, or, sql } from "drizzle-orm"
+import { and, count, desc, eq, ilike, or, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
-import { documents, employeeProfiles, users } from "@/lib/db/schema"
+import { departments, documents, employeeProfiles, news, users, vacations } from "@/lib/db/schema"
+import { hashPassword } from "@/lib/auth/password"
 import { mapContactsData, mapDocumentsData, mapProfileData } from "@/lib/mappers/portal"
 import { mockPortalRepository } from "@/lib/repositories/portal-repository.mock"
 import type { PortalRepository } from "@/lib/repositories/portal-repository.types"
 import type {
+  AdminEmployeeItem,
+  AdminEmployeeUpsertPayload,
+  AdminEmployeesResponse,
   DocumentMetadataCreatePayload,
   DocumentsData,
   DocumentsQuery,
   Employee,
+  EmployeeImportResult,
   EmployeesQuery,
+  NewsDetailResponse,
+  NewsEditorPayload,
+  NewsListQuery,
+  NewsListResponse,
   ProfileData,
+  ProfilePresenceUpdatePayload,
   ProfileUpdatePayload,
 } from "@/types/portal"
 import type { UserRole } from "@/types/auth"
@@ -24,6 +34,55 @@ function roleToPosition(role: string): string {
   if (role === "admin") return "Администратор"
   if (role === "hr_manager") return "HR менеджер"
   return "Сотрудник"
+}
+
+function parseFullName(fullName: string): { firstName: string; lastName: string; middleName: string | null } {
+  const cleaned = fullName.replace(/\s+/g, " ").trim()
+  const [lastName = "", firstName = "", ...rest] = cleaned.split(" ")
+  return {
+    firstName: firstName || "Неизвестно",
+    lastName: lastName || "Неизвестно",
+    middleName: rest.length > 0 ? rest.join(" ") : null,
+  }
+}
+
+function mapStatusToPresence(status: AdminEmployeeUpsertPayload["status"]): string {
+  if (status === "vacation") return "away"
+  if (status === "remote") return "offline"
+  return "office"
+}
+
+function mapRowToAdminStatus(isActive: boolean, presence: string | null): AdminEmployeeItem["status"] {
+  if (!isActive) return "dismissed"
+  if (presence === "away") return "vacation"
+  if (presence === "offline") return "remote"
+  return "active"
+}
+
+function mapNewsCategory(value: string): "company" | "projects" | "people" | "important" {
+  if (value === "projects" || value === "people" || value === "important") return value
+  return "company"
+}
+
+function mapPresenceFromLegacy(value: string | null | undefined): "office" | "remote" | "vacation" {
+  if (value === "offline") return "remote"
+  if (value === "away") return "vacation"
+  return "office"
+}
+
+function mapPresenceToLegacy(value: ProfilePresenceUpdatePayload["presence"]): "office" | "offline" | "away" {
+  if (value === "remote") return "offline"
+  if (value === "vacation") return "away"
+  return "office"
+}
+
+async function getOrCreateDepartmentIdByName(rawName: string): Promise<string | null> {
+  const name = rawName.trim()
+  if (!name) return null
+  const [existing] = await db.select({ id: departments.id }).from(departments).where(eq(departments.name, name)).limit(1)
+  if (existing) return existing.id
+  const [created] = await db.insert(departments).values({ name }).returning({ id: departments.id })
+  return created?.id ?? null
 }
 
 function mapEmployee(
@@ -271,12 +330,96 @@ export const drizzlePortalRepository: PortalRepository = {
         positionTitle: employeeProfiles.positionTitle,
         office: employeeProfiles.office,
         presence: employeeProfiles.presence,
+        departmentName: departments.name,
+        departmentHeadUserId: departments.headUserId,
+        regulationsDocId: departments.regulationsDocId,
+        standardsDocId: departments.standardsDocId,
       })
       .from(users)
       .leftJoin(employeeProfiles, eq(employeeProfiles.userId, users.id))
+      .leftJoin(departments, eq(departments.id, users.departmentId))
       .where(eq(users.id, userId))
 
     if (!row) return null
+
+    const [departmentHead] = row.departmentHeadUserId
+      ? await db
+          .select({
+            id: users.id,
+            firstName: users.firstName,
+            lastName: users.lastName,
+          })
+          .from(users)
+          .where(eq(users.id, row.departmentHeadUserId))
+          .limit(1)
+      : []
+
+    const [regulationsDoc] = row.regulationsDocId
+      ? await db
+          .select({
+            id: documents.id,
+            title: documents.title,
+            filePath: documents.filePath,
+          })
+          .from(documents)
+          .where(eq(documents.id, row.regulationsDocId))
+          .limit(1)
+      : []
+
+    const [standardsDoc] = row.standardsDocId
+      ? await db
+          .select({
+            id: documents.id,
+            title: documents.title,
+            filePath: documents.filePath,
+          })
+          .from(documents)
+          .where(eq(documents.id, row.standardsDocId))
+          .limit(1)
+      : []
+
+    const [jobInstruction] =
+      row.positionTitle && row.positionTitle.length > 0
+        ? await db
+            .select({
+              id: documents.id,
+              title: documents.title,
+              filePath: documents.filePath,
+            })
+            .from(documents)
+            .where(and(eq(documents.docType, "job_instruction"), eq(documents.linkedPosition, row.positionTitle)))
+            .orderBy(desc(documents.createdAt))
+            .limit(1)
+        : []
+
+    const approvedVacations = await db
+      .select({
+        id: vacations.id,
+        userId: vacations.userId,
+        startDate: vacations.startDate,
+        endDate: vacations.endDate,
+        daysTotal: vacations.daysTotal,
+        daysRemaining: vacations.daysRemaining,
+        status: vacations.status,
+        createdAt: vacations.createdAt,
+      })
+      .from(vacations)
+      .where(and(eq(vacations.userId, userId), eq(vacations.status, "approved")))
+      .orderBy(desc(vacations.startDate))
+
+    const today = new Date()
+    const todayIso = today.toISOString().slice(0, 10)
+    const nextVacationRaw = approvedVacations
+      .filter((item) => item.startDate > todayIso)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))[0]
+    const previousVacations = approvedVacations
+      .filter((item) => item.startDate <= todayIso)
+      .sort((a, b) => b.startDate.localeCompare(a.startDate))
+    const latestApproved = approvedVacations[0]
+    const daysUntil = nextVacationRaw
+      ? Math.ceil((new Date(nextVacationRaw.startDate).getTime() - today.getTime()) / 86400000)
+      : null
+
     const fallback = await mockPortalRepository.getProfileData()
     return mapProfileData({
       ...fallback,
@@ -287,29 +430,87 @@ export const drizzlePortalRepository: PortalRepository = {
       initials: `${row.firstName.charAt(0)}${row.lastName.charAt(0)}`.toUpperCase(),
       role: row.role as UserRole,
       roleTitle: row.positionTitle ?? fallback.roleTitle,
-      department: row.departmentId ?? fallback.department,
+      positionTitle: row.positionTitle ?? fallback.roleTitle,
+      department: row.departmentName ?? fallback.department,
       departmentId: row.departmentId,
       phone: row.phone ?? fallback.phone,
       email: row.email,
       office: row.office ?? fallback.office,
       avatarUrl: row.avatarUrl ?? undefined,
-      presence:
+      legacyPresence:
         row.presence === "away" || row.presence === "offline" || row.presence === "office"
           ? row.presence
           : "office",
+      presence: mapPresenceFromLegacy(row.presence),
+      profileTab: {
+        status: mapPresenceFromLegacy(row.presence),
+      },
+      departmentTab: {
+        departmentName: row.departmentName ?? fallback.department,
+        manager: departmentHead
+          ? {
+              id: departmentHead.id,
+              fullName: `${departmentHead.lastName} ${departmentHead.firstName}`.trim(),
+            }
+          : null,
+        regulationsDoc: regulationsDoc
+          ? {
+              id: regulationsDoc.id,
+              title: regulationsDoc.title,
+              downloadUrl: regulationsDoc.filePath ?? undefined,
+            }
+          : null,
+        standardsDoc: standardsDoc
+          ? {
+              id: standardsDoc.id,
+              title: standardsDoc.title,
+              downloadUrl: standardsDoc.filePath ?? undefined,
+            }
+          : null,
+      },
+      documentsTab: {
+        jobInstruction: jobInstruction
+          ? {
+              id: jobInstruction.id,
+              title: jobInstruction.title,
+              downloadUrl: jobInstruction.filePath ?? undefined,
+            }
+          : null,
+      },
+      vacationTab: {
+        daysRemaining: latestApproved?.daysRemaining ?? 0,
+        nextVacation: nextVacationRaw
+          ? {
+              startDate: nextVacationRaw.startDate,
+              endDate: nextVacationRaw.endDate,
+              daysUntil: daysUntil ?? 0,
+            }
+          : null,
+        history: previousVacations.map((item) => ({
+          id: item.id,
+          userId: item.userId,
+          startDate: item.startDate,
+          endDate: item.endDate,
+          daysTotal: item.daysTotal,
+          daysRemaining: item.daysRemaining,
+          status: item.status === "pending" ? "pending" : "approved",
+          createdAt: item.createdAt.toISOString(),
+        })),
+      },
+      vacations: approvedVacations.map((item) => ({
+        id: item.id,
+        userId: item.userId,
+        startDate: item.startDate,
+        endDate: item.endDate,
+        daysTotal: item.daysTotal,
+        daysRemaining: item.daysRemaining,
+        status: item.status === "pending" ? "pending" : "approved",
+        createdAt: item.createdAt.toISOString(),
+      })),
     })
   },
 
   async updateProfile(userId: string, payload: ProfileUpdatePayload): Promise<ProfileData> {
-    await db
-      .update(users)
-      .set({
-        firstName: payload.firstName,
-        lastName: payload.lastName,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId))
-
     await db
       .insert(employeeProfiles)
       .values({
@@ -332,5 +533,398 @@ export const drizzlePortalRepository: PortalRepository = {
       throw new Error("PROFILE_NOT_FOUND")
     }
     return updated
+  },
+
+  async updateMyPresence(userId: string, payload: ProfilePresenceUpdatePayload): Promise<ProfileData> {
+    await db
+      .insert(employeeProfiles)
+      .values({
+        userId,
+        presence: mapPresenceToLegacy(payload.presence),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: employeeProfiles.userId,
+        set: {
+          presence: mapPresenceToLegacy(payload.presence),
+          updatedAt: new Date(),
+        },
+      })
+
+    const updated = await this.getCurrentUserProfile(userId)
+    if (!updated) {
+      throw new Error("PROFILE_NOT_FOUND")
+    }
+    return updated
+  },
+
+  async listAdminEmployees(): Promise<AdminEmployeesResponse> {
+    const rows = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        departmentId: users.departmentId,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        phone: employeeProfiles.phone,
+        positionTitle: employeeProfiles.positionTitle,
+        birthDate: employeeProfiles.birthDate,
+        startDate: employeeProfiles.startDate,
+        welcomeNote: employeeProfiles.welcomeNote,
+        presence: employeeProfiles.presence,
+        office: employeeProfiles.office,
+        departmentName: departments.name,
+      })
+      .from(users)
+      .leftJoin(employeeProfiles, eq(employeeProfiles.userId, users.id))
+      .leftJoin(departments, eq(departments.id, users.departmentId))
+      .orderBy(sql`${users.lastName} asc, ${users.firstName} asc`)
+
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        fullName: `${row.lastName} ${row.firstName}`.trim(),
+        firstName: row.firstName,
+        lastName: row.lastName,
+        middleName: null,
+        positionTitle: row.positionTitle ?? roleToPosition("employee"),
+        departmentId: row.departmentId,
+        departmentName: row.departmentName ?? "Без отдела",
+        phone: row.phone,
+        email: row.email,
+        birthDate: row.birthDate ?? null,
+        startDate: row.startDate ?? null,
+        welcomeNote: row.welcomeNote,
+        status: mapRowToAdminStatus(row.isActive, row.presence),
+        isActive: row.isActive,
+        createdAt: String(row.createdAt),
+        updatedAt: String(row.updatedAt),
+      })),
+    }
+  },
+
+  async createAdminEmployee(payload: AdminEmployeeUpsertPayload): Promise<AdminEmployeeItem> {
+    const result = await this.importEmployees([payload])
+    if (result.errors.length > 0) {
+      throw new Error(result.errors[0]?.reason ?? "IMPORT_FAILED")
+    }
+    const listed = await this.listAdminEmployees()
+    const normalizedEmail = payload.email.trim().toLowerCase()
+    const created = listed.items.find((item) => item.email.toLowerCase() === normalizedEmail)
+    if (!created) {
+      throw new Error("EMPLOYEE_NOT_FOUND")
+    }
+    return created
+  },
+
+  async updateAdminEmployee(id: string, payload: AdminEmployeeUpsertPayload): Promise<AdminEmployeeItem> {
+    const nameParts = parseFullName(payload.fullName)
+    const now = new Date()
+
+    const departmentId = await getOrCreateDepartmentIdByName(payload.departmentName)
+
+    await db
+      .update(users)
+      .set({
+        firstName: nameParts.firstName,
+        lastName: nameParts.lastName,
+        email: payload.email.trim().toLowerCase(),
+        departmentId,
+        isActive: payload.status === "dismissed" ? false : true,
+        updatedAt: now,
+      })
+      .where(eq(users.id, id))
+
+    await db
+      .insert(employeeProfiles)
+      .values({
+        userId: id,
+        phone: payload.phone?.trim() || null,
+        positionTitle: payload.positionTitle.trim(),
+        presence: mapStatusToPresence(payload.status),
+        birthDate: payload.birthDate || null,
+        startDate: payload.startDate || null,
+        welcomeNote: payload.welcomeNote?.trim() || null,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: employeeProfiles.userId,
+        set: {
+          phone: payload.phone?.trim() || null,
+          positionTitle: payload.positionTitle.trim(),
+          presence: mapStatusToPresence(payload.status),
+          birthDate: payload.birthDate || null,
+          startDate: payload.startDate || null,
+          welcomeNote: payload.welcomeNote?.trim() || null,
+          updatedAt: now,
+        },
+      })
+
+    const listed = await this.listAdminEmployees()
+    const item = listed.items.find((entry) => entry.id === id)
+    if (!item) {
+      throw new Error("EMPLOYEE_NOT_FOUND")
+    }
+    return item
+  },
+
+  async hideAdminEmployee(id: string, hidden: boolean): Promise<AdminEmployeeItem> {
+    await db
+      .update(users)
+      .set({
+        isActive: !hidden,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id))
+
+    const listed = await this.listAdminEmployees()
+    const item = listed.items.find((entry) => entry.id === id)
+    if (!item) {
+      throw new Error("EMPLOYEE_NOT_FOUND")
+    }
+    return item
+  },
+
+  async importEmployees(rows: AdminEmployeeUpsertPayload[]): Promise<EmployeeImportResult> {
+    let created = 0
+    let updated = 0
+    const errors: EmployeeImportResult["errors"] = []
+
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index]
+      try {
+        const nameParts = parseFullName(row.fullName)
+        const normalizedEmail = row.email.trim().toLowerCase()
+        const departmentName = row.departmentName.trim()
+        const now = new Date()
+
+        const departmentId = await getOrCreateDepartmentIdByName(departmentName)
+
+        const [existing] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.email, normalizedEmail))
+          .limit(1)
+
+        let userId = existing?.id
+        if (existing) {
+          await db
+            .update(users)
+            .set({
+              firstName: nameParts.firstName,
+              lastName: nameParts.lastName,
+              departmentId,
+              isActive: row.status === "dismissed" ? false : true,
+              updatedAt: now,
+            })
+            .where(eq(users.id, existing.id))
+          updated += 1
+        } else {
+          const generatedPassword = crypto.randomUUID()
+          const passwordHash = await hashPassword(generatedPassword)
+          const [createdUser] = await db
+            .insert(users)
+            .values({
+              email: normalizedEmail,
+              passwordHash,
+              firstName: nameParts.firstName,
+              lastName: nameParts.lastName,
+              role: "employee",
+              departmentId,
+              isActive: row.status === "dismissed" ? false : true,
+            })
+            .returning({ id: users.id })
+          userId = createdUser.id
+          created += 1
+        }
+
+        if (!userId) {
+          throw new Error("Не удалось определить пользователя")
+        }
+
+        await db
+          .insert(employeeProfiles)
+          .values({
+            userId,
+            phone: row.phone?.trim() || null,
+            positionTitle: row.positionTitle.trim(),
+            presence: mapStatusToPresence(row.status),
+            birthDate: row.birthDate || null,
+            startDate: row.startDate || null,
+            welcomeNote: row.welcomeNote?.trim() || null,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: employeeProfiles.userId,
+            set: {
+              phone: row.phone?.trim() || null,
+              positionTitle: row.positionTitle.trim(),
+              presence: mapStatusToPresence(row.status),
+              birthDate: row.birthDate || null,
+              startDate: row.startDate || null,
+              welcomeNote: row.welcomeNote?.trim() || null,
+              updatedAt: now,
+            },
+          })
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "Неизвестная ошибка импорта"
+        errors.push({ row: index + 2, reason })
+      }
+    }
+
+    return { created, updated, errors }
+  },
+
+  async getNewsList(query?: NewsListQuery, includeDrafts = false): Promise<NewsListResponse> {
+    const page = query?.page ?? 1
+    const limit = query?.limit ?? 10
+    const offset = (page - 1) * limit
+    const filterCategory = query?.category && query.category !== "all" ? query.category : undefined
+
+    const where = and(
+      !includeDrafts ? eq(news.status, "published") : undefined,
+      filterCategory ? eq(news.category, filterCategory) : undefined
+    )
+
+    const [totalRow] = await db.select({ value: count() }).from(news).where(where)
+    const rows = await db
+      .select({
+        id: news.id,
+        title: news.title,
+        body: news.body,
+        category: news.category,
+        coverUrl: news.coverUrl,
+        isPinned: news.isPinned,
+        status: news.status,
+        authorId: news.authorId,
+        publishedAt: news.publishedAt,
+        createdAt: news.createdAt,
+        updatedAt: news.updatedAt,
+        authorFirstName: users.firstName,
+        authorLastName: users.lastName,
+      })
+      .from(news)
+      .leftJoin(users, eq(news.authorId, users.id))
+      .where(where)
+      .orderBy(desc(news.isPinned), desc(news.publishedAt), desc(news.createdAt))
+      .limit(limit)
+      .offset(offset)
+
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        body: row.body,
+        category: mapNewsCategory(row.category),
+        coverUrl: row.coverUrl ?? null,
+        isPinned: row.isPinned,
+        status: row.status === "published" ? "published" : "draft",
+        authorId: row.authorId ?? null,
+        authorName: `${row.authorLastName ?? ""} ${row.authorFirstName ?? ""}`.trim() || "Не указан",
+        publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      })),
+      total: Number(totalRow?.value ?? 0),
+      page,
+      limit,
+    }
+  },
+
+  async getNewsById(id: string, includeDrafts = false): Promise<NewsDetailResponse> {
+    const where = and(eq(news.id, id), !includeDrafts ? eq(news.status, "published") : undefined)
+    const [row] = await db
+      .select({
+        id: news.id,
+        title: news.title,
+        body: news.body,
+        category: news.category,
+        coverUrl: news.coverUrl,
+        isPinned: news.isPinned,
+        status: news.status,
+        authorId: news.authorId,
+        publishedAt: news.publishedAt,
+        createdAt: news.createdAt,
+        updatedAt: news.updatedAt,
+        authorFirstName: users.firstName,
+        authorLastName: users.lastName,
+      })
+      .from(news)
+      .leftJoin(users, eq(news.authorId, users.id))
+      .where(where)
+      .limit(1)
+
+    if (!row) return { item: null }
+
+    return {
+      item: {
+        id: row.id,
+        title: row.title,
+        body: row.body,
+        category: mapNewsCategory(row.category),
+        coverUrl: row.coverUrl ?? null,
+        isPinned: row.isPinned,
+        status: row.status === "published" ? "published" : "draft",
+        authorId: row.authorId ?? null,
+        authorName: `${row.authorLastName ?? ""} ${row.authorFirstName ?? ""}`.trim() || "Не указан",
+        publishedAt: row.publishedAt ? row.publishedAt.toISOString() : null,
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      },
+    }
+  },
+
+  async createNews(payload: NewsEditorPayload & { authorId: string }) {
+    const [created] = await db
+      .insert(news)
+      .values({
+        title: payload.title,
+        body: payload.body,
+        category: payload.category,
+        coverUrl: payload.coverUrl ?? null,
+        isPinned: payload.isPinned ?? false,
+        status: payload.status ?? "draft",
+        authorId: payload.authorId,
+        publishedAt:
+          payload.status === "published"
+            ? payload.publishedAt
+              ? new Date(payload.publishedAt)
+              : new Date()
+            : null,
+      })
+      .returning({ id: news.id })
+
+    const detail = await this.getNewsById(created.id, true)
+    return detail.item
+  },
+
+  async updateNews(id: string, payload: NewsEditorPayload) {
+    await db
+      .update(news)
+      .set({
+        title: payload.title,
+        body: payload.body,
+        category: payload.category,
+        coverUrl: payload.coverUrl ?? null,
+        isPinned: payload.isPinned ?? false,
+        status: payload.status ?? "draft",
+        publishedAt:
+          payload.status === "published"
+            ? payload.publishedAt
+              ? new Date(payload.publishedAt)
+              : new Date()
+            : null,
+        updatedAt: new Date(),
+      })
+      .where(eq(news.id, id))
+    const detail = await this.getNewsById(id, true)
+    return detail.item
+  },
+
+  async deleteNews(id: string): Promise<void> {
+    await db.delete(news).where(eq(news.id, id))
   },
 }

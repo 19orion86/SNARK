@@ -6,6 +6,9 @@ import type {
   DocumentsQuery,
   DocumentsData,
   EmployeesQuery,
+  NewsDetailResponse,
+  NewsListQuery,
+  NewsListResponse,
   ProfileData,
   SidebarItem,
 } from "@/types/portal"
@@ -31,4 +34,12 @@ export async function loadProfileData(userId?: string): Promise<ProfileData> {
 
 export async function loadSidebarItems(): Promise<SidebarItem[]> {
   return getPortalRepositoryServer().getSidebarItems()
+}
+
+export async function loadNewsData(query?: NewsListQuery): Promise<NewsListResponse> {
+  return getPortalRepositoryServer().getNewsList(query)
+}
+
+export async function loadNewsById(id: string): Promise<NewsDetailResponse> {
+  return getPortalRepositoryServer().getNewsById(id)
 }
