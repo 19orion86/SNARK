@@ -19,7 +19,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
       })
       return NextResponse.json(payload, { status: 404 })
     }
-    return NextResponse.redirect(data.item.fileUrl)
+    const { getFileStorage } = await import("@/lib/storage")
+    const storage = getFileStorage()
+    const previewUrl = await storage.getPreviewUrl(data.item.fileUrl)
+    return NextResponse.redirect(previewUrl)
   } catch (error) {
     const known = error as Partial<AuthError>
     const status = known.status ?? 500

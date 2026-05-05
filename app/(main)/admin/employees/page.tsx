@@ -5,9 +5,9 @@ import { EmployeeImport } from "@/components/admin/employee-import"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Sheet,
   SheetContent,
@@ -22,8 +22,16 @@ import type { AdminEmployeeItem, AdminEmployeeUpsertPayload } from "@/types/port
 
 type SheetMode = "create" | "edit"
 
-const DEFAULT_FORM: AdminEmployeeUpsertPayload = {
-  fullName: "",
+type AdminEmployeeForm = Omit<AdminEmployeeUpsertPayload, "fullName"> & {
+  lastName: string
+  firstName: string
+  middleName: string
+}
+
+const DEFAULT_FORM: AdminEmployeeForm = {
+  lastName: "",
+  firstName: "",
+  middleName: "",
   positionTitle: "",
   departmentName: "",
   phone: "",
@@ -31,7 +39,6 @@ const DEFAULT_FORM: AdminEmployeeUpsertPayload = {
   birthDate: "",
   startDate: "",
   welcomeNote: "",
-  status: "active",
 }
 
 function formatBirthdayPublic(date?: string | null): string {
@@ -58,7 +65,7 @@ export default function AdminEmployeesPage() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [sheetMode, setSheetMode] = useState<SheetMode>("create")
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState<AdminEmployeeUpsertPayload>(DEFAULT_FORM)
+  const [form, setForm] = useState<AdminEmployeeForm>(DEFAULT_FORM)
 
   const pageTitle = useMemo(
     () => (sheetMode === "create" ? "Добавить сотрудника" : "Редактировать сотрудника"),
@@ -95,10 +102,13 @@ export default function AdminEmployeesPage() {
   }
 
   const openEditSheet = (item: AdminEmployeeItem) => {
+    const parts = item.fullName.trim().split(/\s+/)
     setSheetMode("edit")
     setEditingId(item.id)
     setForm({
-      fullName: item.fullName,
+      lastName: parts[0] ?? "",
+      firstName: parts[1] ?? "",
+      middleName: parts.slice(2).join(" "),
       positionTitle: item.positionTitle,
       departmentName: item.departmentName,
       phone: item.phone ?? "",
@@ -115,11 +125,25 @@ export default function AdminEmployeesPage() {
     setError(null)
     const url = sheetMode === "create" ? "/api/admin/employees" : `/api/admin/employees/${editingId}`
     const method = sheetMode === "create" ? "POST" : "PATCH"
+    const payload: AdminEmployeeUpsertPayload = {
+      positionTitle: form.positionTitle.trim(),
+      departmentName: form.departmentName.trim(),
+      phone: form.phone?.trim() || undefined,
+      email: form.email.trim(),
+      birthDate: form.birthDate?.trim() || undefined,
+      startDate: form.startDate?.trim() || undefined,
+      welcomeNote: form.welcomeNote?.trim() || undefined,
+      status: sheetMode === "edit" ? (form.status ?? "active") : "active",
+      fullName: [form.lastName, form.firstName, form.middleName]
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(" "),
+    }
     try {
       const response = await fetch(url, {
         method,
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       })
       const body = (await response.json()) as { error?: string }
       if (!response.ok) {
@@ -152,6 +176,24 @@ export default function AdminEmployeesPage() {
     }
   }
 
+  const handleDelete = async (id: string, fullName: string) => {
+    const confirmed = window.confirm(`Удалить сотрудника "${fullName}" навсегда?\nЭто действие нельзя отменить.`)
+    if (!confirmed) return
+
+    setError(null)
+    try {
+      const response = await fetch(`/api/admin/employees/${id}`, { method: "DELETE" })
+      const body = (await response.json()) as { error?: string }
+      if (!response.ok) {
+        setError(body.error ?? "Не удалось удалить сотрудника.")
+        return
+      }
+      await loadEmployees()
+    } catch {
+      setError("Ошибка сети при удалении сотрудника.")
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Card className="p-6">
@@ -177,47 +219,61 @@ export default function AdminEmployeesPage() {
         {loading ? (
           <p className="text-sm text-muted-foreground">Загрузка...</p>
         ) : (
-          <Table>
+          <Table className="w-full table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead>ФИО</TableHead>
-                <TableHead>Должность</TableHead>
-                <TableHead>Отдел</TableHead>
-                <TableHead>Телефон</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>День рождения</TableHead>
-                <TableHead>Дата выхода</TableHead>
-                <TableHead>Статус</TableHead>
-                <TableHead className="text-right">Действия</TableHead>
+                <TableHead className="w-[240px]">ФИО</TableHead>
+                <TableHead className="w-[140px]">Должность</TableHead>
+                <TableHead className="w-[130px]">Отдел</TableHead>
+                <TableHead className="w-[120px]">Телефон</TableHead>
+                <TableHead className="w-[120px]">Email</TableHead>
+                <TableHead className="hidden w-[90px] 2xl:table-cell">День рождения</TableHead>
+                <TableHead className="hidden w-[100px] 2xl:table-cell">Дата выхода</TableHead>
+                <TableHead className="w-[95px]">Статус</TableHead>
+                <TableHead className="w-[90px] text-right">Действия</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.map((item) => (
                 <TableRow key={item.id}>
-                  <TableCell>{item.fullName}</TableCell>
-                  <TableCell>{item.positionTitle}</TableCell>
-                  <TableCell>{item.departmentName}</TableCell>
+                  <TableCell className="w-[240px] whitespace-normal break-words" title={item.fullName}>
+                    {item.fullName}
+                  </TableCell>
+                  <TableCell className="max-w-[180px] truncate" title={item.positionTitle}>
+                    {item.positionTitle}
+                  </TableCell>
+                  <TableCell className="max-w-[160px] truncate" title={item.departmentName}>
+                    {item.departmentName}
+                  </TableCell>
                   <TableCell>{item.phone ?? "-"}</TableCell>
-                  <TableCell>{item.email}</TableCell>
-                  <TableCell>{formatBirthdayPublic(item.birthDate)}</TableCell>
-                  <TableCell>{item.startDate ?? "-"}</TableCell>
+                  <TableCell className="max-w-[160px] truncate" title={item.email}>
+                    {item.email}
+                  </TableCell>
+                  <TableCell className="hidden 2xl:table-cell">{formatBirthdayPublic(item.birthDate)}</TableCell>
+                  <TableCell className="hidden 2xl:table-cell">{item.startDate ?? "-"}</TableCell>
                   <TableCell>
                     <Badge variant="secondary">{statusLabel(item.status)}</Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button type="button" variant="outline" size="sm" onClick={() => openEditSheet(item)}>
-                        Редактировать
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleHide(item.id, item.isActive)}
-                      >
-                        {item.isActive ? "Скрыть" : "Показать"}
-                      </Button>
-                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" variant="outline" size="sm" className="h-8 px-2 text-xs">
+                          Действия
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openEditSheet(item)}>Редактировать</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleHide(item.id, item.isActive)}>
+                          {item.isActive ? "Скрыть" : "Показать"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => handleDelete(item.id, item.fullName)}
+                        >
+                          Удалить
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))}
@@ -244,11 +300,36 @@ export default function AdminEmployeesPage() {
 
           <div className="grid gap-4 px-4 pb-4">
             <div className="space-y-2">
-              <Label htmlFor="fullName">ФИО</Label>
+              <Label htmlFor="lastName">
+                Фамилия <span className="text-destructive">*</span>
+              </Label>
               <Input
-                id="fullName"
-                value={form.fullName}
-                onChange={(event) => setForm((prev) => ({ ...prev, fullName: event.target.value }))}
+                id="lastName"
+                value={form.lastName}
+                onChange={(e) => setForm((prev) => ({ ...prev, lastName: e.target.value }))}
+                placeholder="Иванов"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="firstName">
+                Имя <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="firstName"
+                value={form.firstName}
+                onChange={(e) => setForm((prev) => ({ ...prev, firstName: e.target.value }))}
+                placeholder="Иван"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="middleName">
+                Отчество <span className="text-muted-foreground text-xs">(необязательно)</span>
+              </Label>
+              <Input
+                id="middleName"
+                value={form.middleName}
+                onChange={(e) => setForm((prev) => ({ ...prev, middleName: e.target.value }))}
+                placeholder="Иванович"
               />
             </div>
             <div className="space-y-2">
@@ -302,25 +383,6 @@ export default function AdminEmployeesPage() {
                   onChange={(event) => setForm((prev) => ({ ...prev, startDate: event.target.value }))}
                 />
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Статус</Label>
-              <Select
-                value={form.status ?? "active"}
-                onValueChange={(value) =>
-                  setForm((prev) => ({ ...prev, status: value as AdminEmployeeUpsertPayload["status"] }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Выберите статус" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">В офисе</SelectItem>
-                  <SelectItem value="remote">На удалёнке</SelectItem>
-                  <SelectItem value="vacation">В отпуске</SelectItem>
-                  <SelectItem value="dismissed">Скрыт / Уволен</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="welcomeNote">Приветствие</Label>

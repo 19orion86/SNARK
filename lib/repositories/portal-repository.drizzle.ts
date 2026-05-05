@@ -454,10 +454,18 @@ export const drizzlePortalRepository: PortalRepository = {
       })
       .returning({ id: documents.id })
 
+    const objectKey = `documents/${payload.createdBy}/${created.id}/${payload.fileName}`
+
+    // Сохранить objectKey как filePath чтобы потом строить preview URL
+    await db
+      .update(documents)
+      .set({ filePath: objectKey })
+      .where(eq(documents.id, created.id))
+
     return {
       documentId: created.id,
-      objectKey: `documents/${payload.createdBy}/${created.id}/${payload.fileName}`,
-      uploadUrl: `mock://upload/${created.id}`,
+      objectKey,
+      uploadUrl: `pending`, // реальный uploadUrl генерируется в API route через getFileStorage()
       expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     }
   },
@@ -723,6 +731,7 @@ export const drizzlePortalRepository: PortalRepository = {
         updatedAt: users.updatedAt,
         phone: employeeProfiles.phone,
         positionTitle: employeeProfiles.positionTitle,
+        middleName: employeeProfiles.middleName,
         birthDate: employeeProfiles.birthDate,
         startDate: employeeProfiles.startDate,
         welcomeNote: employeeProfiles.welcomeNote,
@@ -738,10 +747,10 @@ export const drizzlePortalRepository: PortalRepository = {
     return {
       items: rows.map((row) => ({
         id: row.id,
-        fullName: `${row.lastName} ${row.firstName}`.trim(),
+        fullName: [row.lastName, row.firstName, row.middleName].filter(Boolean).join(" ").trim(),
         firstName: row.firstName,
         lastName: row.lastName,
-        middleName: null,
+        middleName: row.middleName ?? null,
         positionTitle: row.positionTitle ?? roleToPosition("employee"),
         departmentId: row.departmentId,
         departmentName: row.departmentName ?? "Без отдела",
@@ -797,6 +806,7 @@ export const drizzlePortalRepository: PortalRepository = {
       .insert(employeeProfiles)
       .values({
         userId: id,
+        middleName: nameParts.middleName,
         phone: payload.phone?.trim() || null,
         positionTitle: payload.positionTitle.trim(),
         presence: mapStatusToPresence(payload.status),
@@ -808,6 +818,7 @@ export const drizzlePortalRepository: PortalRepository = {
       .onConflictDoUpdate({
         target: employeeProfiles.userId,
         set: {
+          middleName: nameParts.middleName,
           phone: payload.phone?.trim() || null,
           positionTitle: payload.positionTitle.trim(),
           presence: mapStatusToPresence(payload.status),
@@ -841,6 +852,12 @@ export const drizzlePortalRepository: PortalRepository = {
       throw new Error("EMPLOYEE_NOT_FOUND")
     }
     return item
+  },
+
+  async deleteAdminEmployee(id: string): Promise<void> {
+    // Сначала удалить профиль (cascade должен сработать, но явно надёжнее)
+    await db.delete(employeeProfiles).where(eq(employeeProfiles.userId, id))
+    await db.delete(users).where(eq(users.id, id))
   },
 
   async importEmployees(rows: AdminEmployeeUpsertPayload[]): Promise<EmployeeImportResult> {
@@ -907,6 +924,7 @@ export const drizzlePortalRepository: PortalRepository = {
           .insert(employeeProfiles)
           .values({
             userId,
+            middleName: nameParts.middleName,
             phone: row.phone?.trim() || null,
             positionTitle: row.positionTitle.trim(),
             presence: mapStatusToPresence(row.status),
@@ -918,6 +936,7 @@ export const drizzlePortalRepository: PortalRepository = {
           .onConflictDoUpdate({
             target: employeeProfiles.userId,
             set: {
+              middleName: nameParts.middleName,
               phone: row.phone?.trim() || null,
               positionTitle: row.positionTitle.trim(),
               presence: mapStatusToPresence(row.status),

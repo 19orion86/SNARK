@@ -53,8 +53,8 @@
 - Docker Desktop started.
 - PostgreSQL container launched:
   - image: `postgres:16-alpine`
-  - container: `almakor-postgres`
-  - db: `almakor_portal`
+  - container: `snark-postgres`
+  - db: `snark_portal`
   - user/password: `postgres/postgres`
   - port: `5432`
 

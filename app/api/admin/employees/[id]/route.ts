@@ -62,3 +62,34 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json(payload, { status })
   }
 }
+
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  try {
+    const auth = requireRole(request, ["admin"])
+    // только admin может удалять — hr_manager может только скрывать
+    const { id } = await context.params
+
+    await getPortalRepositoryServer().deleteAdminEmployee(id)
+
+    await writeAuditLog({
+      userId: auth.userId,
+      action: "admin:employees:delete",
+      resourceType: "users",
+      resourceId: id,
+      statusCode: 200,
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    const known = error as Partial<AuthError>
+    const status = known.status ?? 500
+    const payload =
+      status === 500
+        ? apiErrorSchema.parse({ error: "Не удалось удалить сотрудника", code: "INTERNAL_ERROR" })
+        : apiErrorSchema.parse({
+            error: known.message ?? "Ошибка доступа",
+            code: known.code ?? "AUTH_ERROR",
+          })
+    return NextResponse.json(payload, { status })
+  }
+}

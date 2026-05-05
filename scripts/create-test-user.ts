@@ -1,4 +1,5 @@
-import "dotenv/config"
+import { config } from "dotenv"
+config({ path: ".env.local" })
 import bcrypt from "bcryptjs"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { Pool } from "pg"

@@ -5,6 +5,8 @@ import { Card } from "@/components/ui/card"
 import { loadNewsData } from "@/lib/portal-data/loaders"
 import type { NewsCategory } from "@/types/portal"
 
+export const dynamic = "force-dynamic"
+
 interface NewsPageProps {
   searchParams?: Promise<{ category?: string; page?: string }>
 }

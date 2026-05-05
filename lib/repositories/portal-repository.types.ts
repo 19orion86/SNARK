@@ -37,6 +37,7 @@ export interface PortalRepository {
   createAdminEmployee(payload: AdminEmployeeUpsertPayload): Promise<AdminEmployeeItem>
   updateAdminEmployee(id: string, payload: AdminEmployeeUpsertPayload): Promise<AdminEmployeeItem>
   hideAdminEmployee(id: string, hidden: boolean): Promise<AdminEmployeeItem>
+  deleteAdminEmployee(id: string): Promise<void>
   importEmployees(rows: AdminEmployeeUpsertPayload[]): Promise<EmployeeImportResult>
   getNewsList(query?: NewsListQuery, includeDrafts?: boolean): Promise<NewsListResponse>
   getNewsById(id: string, includeDrafts?: boolean): Promise<NewsDetailResponse>

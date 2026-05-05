@@ -1,11 +1,15 @@
 import "server-only"
-import { mockFileStorage } from "@/lib/storage/file-storage.mock"
-import type { FileStorage } from "@/lib/storage/file-storage"
 import { getStorageConfig } from "@/lib/storage/config"
+import type { FileStorage } from "@/lib/storage/file-storage"
+import { mockFileStorage } from "@/lib/storage/file-storage.mock"
+import { s3FileStorage } from "@/lib/storage/s3-file-storage"
 
 export function getFileStorage(): FileStorage {
-  // Placeholder for future AWS SDK integration.
-  // Keep config read to validate env shape during development.
-  getStorageConfig()
-  return mockFileStorage
+  const config = getStorageConfig()
+  const isReal =
+    !!config.accessKeyId &&
+    config.accessKeyId !== "mock" &&
+    config.accessKeyId !== "replace-with-s3-access-key"
+
+  return isReal ? s3FileStorage : mockFileStorage
 }

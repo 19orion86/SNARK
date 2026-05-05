@@ -1,0 +1,1 @@
+ALTER TABLE "employee_profiles" ADD COLUMN "middle_name" text;

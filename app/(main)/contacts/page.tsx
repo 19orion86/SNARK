@@ -1,6 +1,8 @@
 import { EmployeeDirectory } from "@/components/pages/employee-directory"
 import { loadContactsData } from "@/lib/portal-data/loaders"
 
+export const dynamic = "force-dynamic"
+
 export default async function ContactsPage({
   searchParams,
 }: {

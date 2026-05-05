@@ -486,6 +486,10 @@ export const mockPortalRepository: PortalRepository = {
     }
   },
 
+  async deleteAdminEmployee(_id: string): Promise<void> {
+    return
+  },
+
   async importEmployees(rows: AdminEmployeeUpsertPayload[]): Promise<EmployeeImportResult> {
     await delay()
     let created = 0

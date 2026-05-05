@@ -2,6 +2,8 @@ import { headers } from "next/headers"
 import { Documents } from "@/components/pages/documents"
 import { loadDocumentsData } from "@/lib/portal-data/loaders"
 
+export const dynamic = "force-dynamic"
+
 export default async function DocumentsPage({
   searchParams,
 }: {

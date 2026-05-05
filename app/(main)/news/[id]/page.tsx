@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { loadNewsById } from "@/lib/portal-data/loaders"
 
+export const dynamic = "force-dynamic"
+
 interface NewsDetailPageProps {
   params: Promise<{ id: string }>
 }
