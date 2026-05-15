@@ -1,19 +1,14 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { User, Menu, ChevronDown, LogOut } from "lucide-react"
+import { User, Menu, LogOut } from "lucide-react"
+import { BrandLogo } from "@/components/brand-logo"
 import { useAuth } from "@/hooks/use-auth"
-import type { UserRole } from "@/types/auth"
 
 interface HeaderProps {
   onMenuClick?: () => void
-}
-
-const ROLE_LABELS: Record<UserRole, string> = {
-  admin: "Администратор",
-  hr_manager: "HR-менеджер",
-  employee: "Сотрудник",
 }
 
 export function Header({ onMenuClick }: HeaderProps) {
@@ -37,9 +32,6 @@ export function Header({ onMenuClick }: HeaderProps) {
     ? `${user.firstName} ${user.lastName}`.trim()
     : "..."
 
-  const roleLabel = user ? ROLE_LABELS[user.role] ?? user.role : ""
-
-
   return (
     <header className="sticky top-0 z-50 h-16 bg-primary">
       <div className="flex h-full items-center justify-between px-4 md:px-6">
@@ -52,31 +44,30 @@ export function Header({ onMenuClick }: HeaderProps) {
           >
             <Menu className="h-5 w-5" />
           </button>
-          
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10">
-              <span className="text-lg font-bold text-white">С</span>
-            </div>
+
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-3 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            aria-label="На главную — ПКФ Снарк"
+          >
+            <BrandLogo variant="on-dark" size="md" priority />
             <div className="hidden md:block">
-              <h1 className="text-lg font-bold text-white">СНАРК</h1>
+              <p className="text-lg font-bold text-white">СНАРК</p>
               <p className="text-xs text-white/70">Корпоративный портал</p>
             </div>
-          </div>
+          </Link>
         </div>
-        
+
         {/* Right: User profile + logout */}
         <div className="flex items-center gap-1 md:gap-2">
-          {/* User profile */}
-          <button className="flex items-center gap-2 rounded-lg p-1.5 text-white transition-colors hover:bg-white/10 md:px-3 md:py-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent">
-              <User className="h-4 w-4 text-white" />
+          <div className="flex items-center gap-2 md:gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent">
+              <User className="h-4 w-4 text-white" aria-hidden="true" />
             </div>
-            <div className="hidden text-left md:block">
-              <p className="text-sm font-medium">{fullName}</p>
-              <p className="text-xs text-white/70">{roleLabel}</p>
-            </div>
-            <ChevronDown className="hidden h-4 w-4 opacity-70 md:block" />
-          </button>
+            <span className="hidden max-w-[12rem] truncate text-sm font-medium text-white md:block">
+              {fullName}
+            </span>
+          </div>
 
           <button
             type="button"

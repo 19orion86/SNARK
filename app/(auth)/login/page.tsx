@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
+import { BrandLogo } from "@/components/brand-logo"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -45,6 +46,9 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md p-6">
+        <div className="mb-6 flex justify-center">
+          <BrandLogo variant="on-light" size="md" />
+        </div>
         <h1 className="text-2xl font-bold text-card-foreground">Вход в корпоративный портал</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Введите ваш рабочий email и пароль для продолжения.
