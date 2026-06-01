@@ -1,55 +1,61 @@
-# v0-project-snark
+# Корпоративный портал СНАРК
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [v0](https://v0.app).
+Внутренний портал компании: справочник сотрудников, новости, документы, заявки, бронирование, админ-панель.
+Стек: Next.js 16 (App Router) · TypeScript · Tailwind + shadcn/ui · PostgreSQL (Drizzle ORM) · MinIO (S3) · аутентификация на JWT.
 
-## Built with v0
+> Все секреты живут в `.env.local` — он **не** попадает в git. Локально и на сервере он свой.
 
-This repository is linked to a [v0](https://v0.app) project. You can continue developing by visiting the link below -- start new chats to make changes, and v0 will push commits directly to this repo. Every merge to `main` will automatically deploy.
+---
 
-[Continue working on v0 →](https://v0.app/chat/projects/prj_NRVet4pazJGXOIjV1LVgFfU4a1e2)
+## Локальный запуск (разработка)
 
-## Getting Started
+Инфраструктура (БД + хранилище) поднимается в Docker, само приложение — нативно через `pnpm dev` с горячей перезагрузкой.
 
-First, run the development server:
+**Требуется:** Node.js 22 LTS, pnpm, Docker Desktop.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-```
+1. Поднять PostgreSQL и MinIO:
+   docker compose up -d
+2. Создать `.env.local` на основе `.env.example`:
+   DATABASE_URL=postgres://portal_dev:ПАРОЛЬ@localhost:5432/portal_dev
+   USE_MOCK_DB=false
+   JWT_ACCESS_SECRET=<openssl rand -hex 32>
+   JWT_REFRESH_SECRET=<openssl rand -hex 32>
+   S3_ENDPOINT=http://localhost:9000
+   S3_REGION=ru-central-1
+   S3_BUCKET=snark-portal
+   S3_ACCESS_KEY_ID=minioadmin
+   S3_SECRET_ACCESS_KEY=minioadmin123
+3. Создать бакет: http://localhost:9001 (minioadmin / minioadmin123) → Buckets → Create Bucket → `snark-portal` → Access Policy: Public.
+4. Установить и подготовить БД:
+   pnpm install
+   pnpm db:migrate
+   pnpm init:users
+5. Запустить:
+   pnpm dev
+   Портал: http://localhost:3000
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Сервер (Windows, продакшен)
 
-## Windows: DB Commands (PowerShell)
+На сервере всё нативное, **без Docker**: PostgreSQL и MinIO установлены как программы Windows, приложение держит PM2 через `next start` против production-сборки. Standalone-режим не используется.
 
-If `pnpm db:migrate` fails in Cursor terminal with errors like `"pnpm" is not recognized` or `"node" is not recognized`, prepare the shell environment first:
+### Выкатка обновлений
+    cd C:\apps\snark-portal
+    git pull origin main
+    pnpm install        # если менялись зависимости или .npmrc
+    pnpm db:migrate     # если были новые миграции (сделай бэкап БД заранее!)
+    pnpm build
+    pm2 restart snark-portal
 
-```powershell
-powershell -ExecutionPolicy Bypass -File "scripts/dev-shell.ps1"
-```
+Адреса: портал — http://<IP-сервера>:3000, MinIO-консоль — http://localhost:9001
 
-Then run DB commands as usual:
+### Живёт только на сервере (нет в git)
+- `.env.local` — секреты. На HTTP-сервере обязательно `COOKIE_SECURE=false`.
+- `ecosystem.config.js` — конфиг PM2 с путями сервера.
 
-```powershell
-pnpm db:migrate
-pnpm db:generate
-pnpm db:studio
-```
-
-The helper script:
-- ensures `pnpm` and `node` are available in `PATH`,
-- loads `DATABASE_URL` from `.env.local` when needed.
-
-## Learn More
-
-To learn more, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [v0 Documentation](https://v0.app/docs) - learn about v0 and how to use it.
-
-<a href="https://v0.app/chat/api/kiro/clone/VasiliiLbyte/v0-project-snark" alt="Open in Kiro"><img src="https://pdgvvgmkdvyeydso.public.blob.vercel-storage.com/open%20in%20kiro.svg?sanitize=true" /></a>
+### Управление процессом
+    pm2 status
+    pm2 logs snark-portal
+    pm2 restart snark-portal
+    pm2 save
