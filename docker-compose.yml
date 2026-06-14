@@ -44,9 +44,27 @@ services:
     networks:
       - portal_net
 
+  # Redis для Celery (сервис протоколов)
+  redis:
+    image: redis:7-alpine
+    container_name: portal-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - portal_net
+
 volumes:
   postgres_data:
   minio_data:
+  redis_data:
 
 networks:
   portal_net:

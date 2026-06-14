@@ -675,3 +675,155 @@ export interface KnowledgeEditorPayload {
   tags?: string | null
   isPublished?: boolean
 }
+
+export type TaskStatus = "new" | "in_progress" | "review" | "done" | "cancelled"
+export type TaskPriority = "low" | "medium" | "high" | "critical"
+
+export interface PortalTask {
+  id: string
+  title: string
+  description: string | null
+  status: TaskStatus
+  priority: TaskPriority
+  assigneeId: string | null
+  assigneeName: string | null
+  creatorId: string
+  creatorName: string
+  departmentId: string | null
+  departmentName: string | null
+  dueDate: string | null
+  protocolActionItemId: number | null
+  completedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TasksQuery {
+  status?: TaskStatus | "all"
+  assigneeId?: string
+  page?: number
+  limit?: number
+}
+
+export interface TasksListResponse {
+  items: PortalTask[]
+  total: number
+  page: number
+  limit: number
+}
+
+export interface TaskDetailResponse {
+  item: PortalTask | null
+}
+
+export interface TaskCreatePayload {
+  title: string
+  description?: string | null
+  priority?: TaskPriority
+  assigneeId?: string | null
+  departmentId?: string | null
+  dueDate?: string | null
+}
+
+export interface TaskUpdatePayload {
+  title?: string
+  description?: string | null
+  status?: TaskStatus
+  priority?: TaskPriority
+  assigneeId?: string | null
+  departmentId?: string | null
+  dueDate?: string | null
+}
+
+export type ChatChannelType = "direct" | "group" | "department"
+
+export interface ChatChannel {
+  id: string
+  name: string | null
+  type: ChatChannelType
+  departmentId: string | null
+  createdBy: string | null
+  memberCount: number
+  unreadCount: number
+  lastMessage: ChatMessage | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ChatMessage {
+  id: string
+  channelId: string
+  authorId: string
+  authorName: string
+  body: string
+  createdAt: string
+  editedAt: string | null
+}
+
+export interface ChatChannelsListResponse {
+  items: ChatChannel[]
+}
+
+export interface ChatMessagesListResponse {
+  items: ChatMessage[]
+  channelId: string
+}
+
+export interface ChatChannelCreatePayload {
+  type: ChatChannelType
+  name?: string | null
+  memberIds: string[]
+  departmentId?: string | null
+}
+
+export interface ChatMessageCreatePayload {
+  body: string
+}
+
+export type ProtocolStatus =
+  | "uploaded"
+  | "processing"
+  | "transcribing"
+  | "generating"
+  | "completed"
+  | "failed"
+
+export interface ProtocolListItem {
+  id: number
+  title: string
+  meetingDate: string
+  participants: string[]
+  status: ProtocolStatus
+  source: string
+  createdAt: string
+  actionItemsCount?: number
+}
+
+export interface ProtocolDetail extends ProtocolListItem {
+  protocolText: string | null
+  transcriptText: string | null
+  agenda: string[]
+  decisions: string[]
+  actionItems: ProtocolActionItem[]
+  errorMessage: string | null
+}
+
+export interface ProtocolActionItem {
+  id: number
+  text: string
+  assignee: string
+  deadline: string | null
+  status: string
+  priority: string
+}
+
+export interface ProtocolListResponse {
+  items: ProtocolListItem[]
+  total: number
+}
+
+export interface ProtocolUploadPayload {
+  title: string
+  meetingDate: string
+  participants: string[]
+}

@@ -16,3 +16,14 @@ node_modules
 .DS_Store
 tsconfig.tsbuildinfo
 ecosystem.config.js
+
+# Python protocol service runtime data
+services/protocols/static/meetings/enc_*
+services/protocols/static/meetings/*.webm
+services/protocols/static/meetings/*.mp3
+services/protocols/.venv/
+services/protocols/**/__pycache__/
+services/protocols/**/*.pyc
+services/protocols/.env
+services/protocols/.env.local
+services/protocols/**/*.egg-info/

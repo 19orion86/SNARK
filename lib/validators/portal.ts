@@ -824,3 +824,113 @@ export const knowledgeDetailResponseSchema = z.object({
 
 export type KnowledgeListQueryInput = z.infer<typeof knowledgeListQuerySchema>
 export type KnowledgeEditorInput = z.infer<typeof knowledgeEditorSchema>
+
+export const taskStatusEnum = z.enum(["new", "in_progress", "review", "done", "cancelled"])
+export const taskPriorityEnum = z.enum(["low", "medium", "high", "critical"])
+
+export const tasksListQuerySchema = z.object({
+  status: z.enum(["new", "in_progress", "review", "done", "cancelled", "all"]).optional(),
+  assigneeId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+})
+
+export const taskCreateSchema = z.object({
+  title: z.string().trim().min(1).max(500),
+  description: z.string().trim().max(5000).optional().nullable(),
+  priority: taskPriorityEnum.optional(),
+  assigneeId: z.string().uuid().optional().nullable(),
+  departmentId: z.string().uuid().optional().nullable(),
+  dueDate: z.string().optional().nullable(),
+})
+
+export const taskUpdateSchema = z.object({
+  title: z.string().trim().min(1).max(500).optional(),
+  description: z.string().trim().max(5000).optional().nullable(),
+  status: taskStatusEnum.optional(),
+  priority: taskPriorityEnum.optional(),
+  assigneeId: z.string().uuid().optional().nullable(),
+  departmentId: z.string().uuid().optional().nullable(),
+  dueDate: z.string().optional().nullable(),
+})
+
+export const portalTaskSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  description: z.string().nullable(),
+  status: taskStatusEnum,
+  priority: taskPriorityEnum,
+  assigneeId: z.string().uuid().nullable(),
+  assigneeName: z.string().nullable(),
+  creatorId: z.string().uuid(),
+  creatorName: z.string(),
+  departmentId: z.string().uuid().nullable(),
+  departmentName: z.string().nullable(),
+  dueDate: z.string().nullable(),
+  protocolActionItemId: z.number().int().nullable(),
+  completedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export const tasksListResponseSchema = z.object({
+  items: z.array(portalTaskSchema),
+  total: z.number().int().min(0),
+  page: z.number().int().min(1),
+  limit: z.number().int().min(1),
+})
+
+export const taskDetailResponseSchema = z.object({
+  item: portalTaskSchema.nullable(),
+})
+
+export const chatChannelTypeEnum = z.enum(["direct", "group", "department"])
+
+export const chatChannelCreateSchema = z.object({
+  type: chatChannelTypeEnum,
+  name: z.string().trim().max(200).optional().nullable(),
+  memberIds: z.array(z.string().uuid()).default([]),
+  departmentId: z.string().uuid().optional().nullable(),
+})
+
+export const chatMessageCreateSchema = z.object({
+  body: z.string().trim().min(1).max(10000),
+})
+
+export const chatMessageSchema = z.object({
+  id: z.string().uuid(),
+  channelId: z.string().uuid(),
+  authorId: z.string().uuid(),
+  authorName: z.string(),
+  body: z.string(),
+  createdAt: z.string(),
+  editedAt: z.string().nullable(),
+})
+
+export const chatChannelSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().nullable(),
+  type: chatChannelTypeEnum,
+  departmentId: z.string().uuid().nullable(),
+  createdBy: z.string().uuid().nullable(),
+  memberCount: z.number().int().min(0),
+  unreadCount: z.number().int().min(0),
+  lastMessage: chatMessageSchema.nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export const chatChannelsListResponseSchema = z.object({
+  items: z.array(chatChannelSchema),
+})
+
+export const chatMessagesListResponseSchema = z.object({
+  items: z.array(chatMessageSchema),
+  channelId: z.string().uuid(),
+})
+
+export const protocolUploadFormSchema = z.object({
+  title: z.string().trim().min(1).max(500),
+  meetingDate: z.string().trim().min(1),
+  participants: z.string().trim().min(1),
+})

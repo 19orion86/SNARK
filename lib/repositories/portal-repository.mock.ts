@@ -886,6 +886,15 @@ export const mockPortalRepository: PortalRepository = {
       { id: "contacts", label: "Сотрудники", icon: "Users", description: "Справочник", href: "/contacts" },
       { id: "structure", label: "Структура", icon: "Building2", description: "Оргструктура", href: "/structure" },
       { id: "documents", label: "Документы", icon: "FileText", description: "Нормативная база", href: "/documents" },
+      {
+        id: "protocols",
+        label: "Протоколы",
+        icon: "Mic",
+        description: "Аудио → текст → протокол",
+        href: "/protocols",
+      },
+      { id: "tasks", label: "Задачи", icon: "CheckSquare", description: "Таск-менеджер", href: "/tasks" },
+      { id: "chat", label: "Чат", icon: "MessageSquare", description: "Внутренняя переписка", href: "/chat" },
       { id: "profile", label: "Мой профиль", icon: "User", description: "Личный кабинет", href: "/profile" },
       {
         id: "admin",

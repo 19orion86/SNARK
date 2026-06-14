@@ -78,6 +78,13 @@
       "when": 1778756757603,
       "tag": "0010_users_last_login_at",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1778851200000,
+      "tag": "0011_chat_tasks",
+      "breakpoints": true
     }
   ]
 }

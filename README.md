@@ -1,61 +1,166 @@
 # Корпоративный портал СНАРК
 
-Внутренний портал компании: справочник сотрудников, новости, документы, заявки, бронирование, админ-панель.
-Стек: Next.js 16 (App Router) · TypeScript · Tailwind + shadcn/ui · PostgreSQL (Drizzle ORM) · MinIO (S3) · аутентификация на JWT.
+Внутренний портал компании: справочник сотрудников, новости, документы, заявки, **протоколы совещаний (аудио/видео → текст)**, **внутренний чат**, **таск-менеджер**, админ-панель.
+
+Стек: Next.js 16 (App Router) · TypeScript · Tailwind + shadcn/ui · PostgreSQL (Drizzle ORM) · MinIO (S3) · JWT · Python FastAPI + Celery (модуль протоколов).
 
 > Все секреты живут в `.env.local` — он **не** попадает в git. Локально и на сервере он свой.
 
 ---
 
+## Архитектура
+
+| Компонент | Путь | Порт |
+|-----------|------|------|
+| Портал (Next.js) | корень репозитория | 3000 |
+| Протоколы (Python) | `services/protocols` | 8000 |
+| PostgreSQL | Docker | 5432 |
+| MinIO | Docker | 9000 / 9001 |
+| Redis (Celery) | Docker | 6379 |
+
+Портал проксирует запросы к Python-сервису через `PROTOCOLS_API_URL` (см. `.env.example`).
+
+---
+
 ## Локальный запуск (разработка)
 
-Инфраструктура (БД + хранилище) поднимается в Docker, само приложение — нативно через `pnpm dev` с горячей перезагрузкой.
+**Требуется:** Node.js 22 LTS, pnpm, Docker Desktop, Python 3.12, ffmpeg (для видео).
 
-**Требуется:** Node.js 22 LTS, pnpm, Docker Desktop.
+### 1. Инфраструктура
 
-1. Поднять PostgreSQL и MinIO:
-   docker compose up -d
-2. Создать `.env.local` на основе `.env.example`:
-   DATABASE_URL=postgres://portal_dev:ПАРОЛЬ@localhost:5432/portal_dev
-   USE_MOCK_DB=false
-   JWT_ACCESS_SECRET=<openssl rand -hex 32>
-   JWT_REFRESH_SECRET=<openssl rand -hex 32>
-   S3_ENDPOINT=http://localhost:9000
-   S3_REGION=ru-central-1
-   S3_BUCKET=snark-portal
-   S3_ACCESS_KEY_ID=minioadmin
-   S3_SECRET_ACCESS_KEY=minioadmin123
-3. Создать бакет: http://localhost:9001 (minioadmin / minioadmin123) → Buckets → Create Bucket → `snark-portal` → Access Policy: Public.
-4. Установить и подготовить БД:
-   pnpm install
-   pnpm db:migrate
-   pnpm init:users
-5. Запустить:
-   pnpm dev
-   Портал: http://localhost:3000
+```bash
+docker compose up -d
+```
+
+Поднимает PostgreSQL, MinIO и Redis.
+
+### 2. Портал
+
+```bash
+cp .env.example .env.local
+# Отредактируйте DATABASE_URL, JWT_* , S3_*, PROTOCOLS_API_URL
+
+pnpm install
+pnpm db:migrate
+pnpm init:users
+pnpm dev
+```
+
+Портал: http://localhost:3000
+
+MinIO-консоль: http://localhost:9001 (minioadmin / minioadmin123) → создайте бакет `snark-portal`.
+
+### 3. Сервис протоколов (аудио/видео → текст → протокол)
+
+```bash
+cd services/protocols
+cp .env.example .env.local
+# Укажите DATABASE_URL, REDIS_URL, ключи STT/LLM
+
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+pip install -e .
+
+alembic upgrade head
+
+# Терминал 1 — API
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+
+# Терминал 2 — Celery worker
+celery -A src.core.celery_app.app.celery_app worker -l info --pool=solo
+```
+
+Swagger: http://localhost:8000/docs
+
+---
+
+## Новые разделы портала
+
+| Раздел | URL | Описание |
+|--------|-----|----------|
+| Протоколы | `/protocols` | Загрузка аудио/видео, просмотр протокола, экспорт DOCX |
+| Задачи | `/tasks` | Создание и отслеживание поручений |
+| Чат | `/chat` | Групповые каналы и переписка |
+
+---
+
+## Тестирование
+
+### Быстрый старт (mock-режим, без БД)
+
+```bash
+# .env.local
+USE_MOCK_DB=true
+pnpm dev
+```
+
+Работают: задачи, чат (in-memory), остальной портал на моках. Протоколы требуют Python-сервис.
+
+### Полный стек
+
+1. `docker compose up -d`
+2. `pnpm db:migrate && pnpm init:users`
+3. `USE_MOCK_DB=false` в `.env.local`
+4. `pnpm dev`
+5. Запустите `services/protocols` (API + Celery)
+6. Войдите на http://localhost:3000/login
+
+**Проверка задач:** `/tasks` → создать задачу → сменить статус.
+
+**Проверка чата:** `/chat` → «Создать групповой чат» → отправить сообщение.
+
+**Проверка протоколов:** `/protocols` → загрузить короткий `.mp3`/`.webm` → дождаться статуса «Готов» → открыть детали → скачать DOCX.
+
+**API вручную:**
+
+```bash
+# после login (cookies в браузере) или через curl с cookie
+curl http://localhost:3000/api/tasks
+curl http://localhost:3000/api/chat/channels
+curl http://localhost:3000/api/protocols
+```
+
+**Typecheck и тесты портала:**
+
+```bash
+pnpm typecheck
+pnpm test
+```
 
 ---
 
 ## Сервер (Windows, продакшен)
 
-На сервере всё нативное, **без Docker**: PostgreSQL и MinIO установлены как программы Windows, приложение держит PM2 через `next start` против production-сборки. Standalone-режим не используется.
+На сервере всё нативное, **без Docker**: PostgreSQL, MinIO, Redis и Python-сервис протоколов — отдельные процессы; портал держит PM2.
 
 ### Выкатка обновлений
-    cd C:\apps\snark-portal
-    git pull origin main
-    pnpm install        # если менялись зависимости или .npmrc
-    pnpm db:migrate     # если были новые миграции (сделай бэкап БД заранее!)
-    pnpm build
-    pm2 restart snark-portal
 
-Адреса: портал — http://<IP-сервера>:3000, MinIO-консоль — http://localhost:9001
+```
+cd C:\apps\snark-portal
+git pull origin main
+pnpm install
+pnpm db:migrate
+pnpm build
+pm2 restart snark-portal
+# + перезапуск Python API, Celery worker
+```
 
 ### Живёт только на сервере (нет в git)
-- `.env.local` — секреты. На HTTP-сервере обязательно `COOKIE_SECURE=false`.
-- `ecosystem.config.js` — конфиг PM2 с путями сервера.
 
-### Управление процессом
-    pm2 status
-    pm2 logs snark-portal
-    pm2 restart snark-portal
-    pm2 save
+- `.env.local` — секреты портала
+- `services/protocols/.env.local` — секреты Python-сервиса
+- `ecosystem.config.js` — конфиг PM2
+
+---
+
+## О модуле протоколов
+
+Исходный проект HR-бота (Module 3) интегрирован в `services/protocols/`:
+
+- STT (faster-whisper / Yandex SpeechKit)
+- Диаризация спикеров (pyannote)
+- LLM-генерация протокола и поручений
+- Шифрование файлов (FZ-152)
+- Экспорт DOCX
+
+Подробности: `services/protocols/README.md`

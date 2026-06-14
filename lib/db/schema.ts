@@ -186,3 +186,84 @@ export const knowledgeArticles = pgTable("knowledge_articles", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })
+
+export const taskStatusEnum = pgEnum("task_status", [
+  "new",
+  "in_progress",
+  "review",
+  "done",
+  "cancelled",
+])
+
+export const taskPriorityEnum = pgEnum("task_priority", ["low", "medium", "high", "critical"])
+
+export const tasks = pgTable("tasks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: taskStatusEnum("status").notNull().default("new"),
+  priority: taskPriorityEnum("priority").notNull().default("medium"),
+  assigneeId: uuid("assignee_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  creatorId: uuid("creator_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  departmentId: uuid("department_id").references((): AnyPgColumn => departments.id, {
+    onDelete: "set null",
+  }),
+  dueDate: date("due_date"),
+  protocolActionItemId: integer("protocol_action_item_id"),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const taskComments = pgTable("task_comments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  taskId: uuid("task_id")
+    .notNull()
+    .references(() => tasks.id, { onDelete: "cascade" }),
+  authorId: uuid("author_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const chatChannelTypeEnum = pgEnum("chat_channel_type", ["direct", "group", "department"])
+
+export const chatChannels = pgTable("chat_channels", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name"),
+  type: chatChannelTypeEnum("type").notNull().default("direct"),
+  departmentId: uuid("department_id").references((): AnyPgColumn => departments.id, {
+    onDelete: "set null",
+  }),
+  createdBy: uuid("created_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const chatChannelMembers = pgTable("chat_channel_members", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  channelId: uuid("channel_id")
+    .notNull()
+    .references(() => chatChannels.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+  lastReadAt: timestamp("last_read_at", { withTimezone: true }),
+})
+
+export const chatMessages = pgTable("chat_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  channelId: uuid("channel_id")
+    .notNull()
+    .references(() => chatChannels.id, { onDelete: "cascade" }),
+  authorId: uuid("author_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
+})

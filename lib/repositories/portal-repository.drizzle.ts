@@ -17,6 +17,7 @@ import { hashPassword } from "@/lib/auth/password"
 import { revokeAllRefreshTokensForUser } from "@/lib/auth/session"
 import { mapContactsData, mapDocumentsData, mapProfileData } from "@/lib/mappers/portal"
 import { mockPortalRepository } from "@/lib/repositories/portal-repository.mock"
+import { listMyDashboardTasks } from "@/lib/repositories/tasks.repository"
 import type { PortalRepository } from "@/lib/repositories/portal-repository.types"
 import type {
   AdminDepartmentItem,
@@ -502,6 +503,7 @@ export const drizzlePortalRepository: PortalRepository = {
       welcomeName,
       birthdays,
       newEmployees,
+      myTasks: userId ? await listMyDashboardTasks(userId) : fallback.myTasks,
       recentNews: recentNewsRows.map((row) => ({
         id: row.id,
         title: row.title,

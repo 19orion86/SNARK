@@ -13,6 +13,9 @@ import {
   ShieldCheck,
   ChevronRight,
   X,
+  MessageSquare,
+  CheckSquare,
+  Mic,
 } from 'lucide-react'
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -45,6 +48,9 @@ const iconMap = {
   HelpCircle,
   BookOpen,
   Newspaper,
+  MessageSquare,
+  CheckSquare,
+  Mic,
 } as const
 
 function getIcon(iconName: SidebarItem["icon"]) {
