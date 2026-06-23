@@ -10,11 +10,13 @@ import {
   knowledgeArticles,
   news,
   tickets,
+  ticketCategories,
   users,
   vacations,
 } from "@/lib/db/schema"
 import { hashPassword } from "@/lib/auth/password"
 import { revokeAllRefreshTokensForUser } from "@/lib/auth/session"
+import { formatFullName, formatInitials } from "@/lib/portal-data/format-name"
 import { mapContactsData, mapDocumentsData, mapProfileData } from "@/lib/mappers/portal"
 import { mockPortalRepository } from "@/lib/repositories/portal-repository.mock"
 import { listMyDashboardTasks } from "@/lib/repositories/tasks.repository"
@@ -61,7 +63,9 @@ import type {
   ProfileUpdatePayload,
   Ticket,
   TicketAdminUpdatePayload,
-  TicketCategory,
+  TicketCategoriesResponse,
+  TicketCategoryItem,
+  TicketCategoryUpsertPayload,
   TicketCreatePayload,
   TicketPriority,
   TicketStatus,
@@ -77,7 +81,7 @@ import type {
 import type { UserRole } from "@/types/auth"
 
 function initials(firstName: string, lastName: string): string {
-  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
+  return formatInitials(lastName, firstName)
 }
 
 function roleToPosition(role: string): string {
@@ -226,6 +230,7 @@ interface EmployeeRow {
   id: string
   firstName: string
   lastName: string
+  middleName?: string | null
   email: string
   isActive: boolean
   createdAt: Date | string | null
@@ -254,14 +259,14 @@ function mapRowToEmployee(row: EmployeeRow, listId: number): Employee {
   return {
     id: listId,
     userId: row.id,
-    name: `${row.firstName} ${row.lastName}`.trim(),
+    name: formatFullName(row.lastName, row.firstName, row.middleName),
     position: row.positionTitle ?? "Сотрудник",
     department: row.departmentName ?? "Без отдела",
     phone: row.phone ?? "Не указан",
     email: row.email,
     office: row.office ?? "Не указан",
     status: row.isActive ? presenceToStatus(row.presence) : "offline",
-    avatar: initials(row.firstName, row.lastName),
+    avatar: formatInitials(row.lastName, row.firstName),
     avatarUrl: row.avatarUrl ?? undefined,
     inn: row.inn,
     snils: row.snils,
@@ -555,6 +560,7 @@ export const drizzlePortalRepository: PortalRepository = {
         id: users.id,
         firstName: users.firstName,
         lastName: users.lastName,
+        middleName: employeeProfiles.middleName,
         email: users.email,
         isActive: users.isActive,
         createdAt: users.createdAt,
@@ -613,6 +619,7 @@ export const drizzlePortalRepository: PortalRepository = {
         id: users.id,
         firstName: users.firstName,
         lastName: users.lastName,
+        middleName: employeeProfiles.middleName,
         email: users.email,
         isActive: users.isActive,
         createdAt: users.createdAt,
@@ -920,6 +927,7 @@ export const drizzlePortalRepository: PortalRepository = {
         id: users.id,
         firstName: users.firstName,
         lastName: users.lastName,
+        middleName: employeeProfiles.middleName,
         email: users.email,
         role: users.role,
         departmentId: users.departmentId,
@@ -1028,8 +1036,8 @@ export const drizzlePortalRepository: PortalRepository = {
       userId: row.id,
       firstName: row.firstName,
       lastName: row.lastName,
-      fullName: `${row.firstName} ${row.lastName}`,
-      initials: `${row.firstName.charAt(0)}${row.lastName.charAt(0)}`.toUpperCase(),
+      fullName: formatFullName(row.lastName, row.firstName, row.middleName),
+      initials: formatInitials(row.lastName, row.firstName),
       role: row.role as UserRole,
       roleTitle: row.positionTitle ?? fallback.roleTitle,
       positionTitle: row.positionTitle ?? fallback.roleTitle,
@@ -1052,7 +1060,7 @@ export const drizzlePortalRepository: PortalRepository = {
         manager: departmentHead
           ? {
               id: departmentHead.id,
-              fullName: `${departmentHead.lastName} ${departmentHead.firstName}`.trim(),
+              fullName: formatFullName(departmentHead.lastName, departmentHead.firstName),
             }
           : null,
         regulationsDoc: regulationsDoc
@@ -1095,22 +1103,33 @@ export const drizzlePortalRepository: PortalRepository = {
   },
 
   async updateProfile(userId: string, payload: ProfileUpdatePayload): Promise<ProfileData> {
-    await db
-      .insert(employeeProfiles)
-      .values({
-        userId,
-        phone: payload.phone ?? null,
-        avatarUrl: payload.avatarUrl ?? null,
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: employeeProfiles.userId,
-        set: {
-          phone: payload.phone ?? null,
-          avatarUrl: payload.avatarUrl ?? null,
+    const set: {
+      updatedAt: Date
+      phone?: string | null
+      avatarUrl?: string | null
+    } = { updatedAt: new Date() }
+
+    if (payload.phone !== undefined) {
+      set.phone = payload.phone || null
+    }
+    if (payload.avatarUrl !== undefined) {
+      set.avatarUrl = payload.avatarUrl || null
+    }
+
+    if (payload.phone !== undefined || payload.avatarUrl !== undefined) {
+      await db
+        .insert(employeeProfiles)
+        .values({
+          userId,
+          phone: payload.phone !== undefined ? payload.phone || null : null,
+          avatarUrl: payload.avatarUrl !== undefined ? payload.avatarUrl || null : null,
           updatedAt: new Date(),
-        },
-      })
+        })
+        .onConflictDoUpdate({
+          target: employeeProfiles.userId,
+          set,
+        })
+    }
 
     const updated = await this.getCurrentUserProfile(userId)
     if (!updated) {
@@ -2093,6 +2112,59 @@ export const drizzlePortalRepository: PortalRepository = {
     await db.delete(knowledgeArticles).where(eq(knowledgeArticles.id, id))
   },
 
+  async listTicketCategories(activeOnly = false): Promise<TicketCategoriesResponse> {
+    const rows = await db
+      .select()
+      .from(ticketCategories)
+      .where(activeOnly ? eq(ticketCategories.isActive, true) : undefined)
+      .orderBy(asc(ticketCategories.sortOrder), asc(ticketCategories.label))
+
+    return { items: rows.map(mapTicketCategoryRow) }
+  },
+
+  async createTicketCategory(payload: TicketCategoryUpsertPayload): Promise<TicketCategoryItem> {
+    const [created] = await db
+      .insert(ticketCategories)
+      .values({
+        slug: payload.slug,
+        label: payload.label,
+        description: payload.description ?? null,
+        isActive: payload.isActive ?? true,
+        sortOrder: payload.sortOrder ?? 0,
+        updatedAt: new Date(),
+      })
+      .returning()
+
+    return mapTicketCategoryRow(created)
+  },
+
+  async updateTicketCategory(
+    id: string,
+    payload: Partial<TicketCategoryUpsertPayload>
+  ): Promise<TicketCategoryItem> {
+    const [updated] = await db
+      .update(ticketCategories)
+      .set({
+        ...(payload.slug !== undefined ? { slug: payload.slug } : {}),
+        ...(payload.label !== undefined ? { label: payload.label } : {}),
+        ...(payload.description !== undefined ? { description: payload.description ?? null } : {}),
+        ...(payload.isActive !== undefined ? { isActive: payload.isActive } : {}),
+        ...(payload.sortOrder !== undefined ? { sortOrder: payload.sortOrder } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(ticketCategories.id, id))
+      .returning()
+
+    if (!updated) {
+      throw new Error("Категория не найдена")
+    }
+    return mapTicketCategoryRow(updated)
+  },
+
+  async deleteTicketCategory(id: string): Promise<void> {
+    await db.delete(ticketCategories).where(eq(ticketCategories.id, id))
+  },
+
   async listAdminDepartments(): Promise<AdminDepartmentsResponse> {
     const parentAlias = alias(departments, "parent_dept")
     const headAlias = alias(users, "head_user")
@@ -2480,9 +2552,21 @@ function fullName(lastName: string | null, firstName: string | null): string {
   return `${lastName ?? ""} ${firstName ?? ""}`.trim()
 }
 
-function normalizeCategory(value: string): TicketCategory {
-  if (value === "aho" || value === "hr" || value === "other") return value
-  return "it"
+function normalizeCategory(value: string): string {
+  return value.trim() || "it"
+}
+
+function mapTicketCategoryRow(row: typeof ticketCategories.$inferSelect): TicketCategoryItem {
+  return {
+    id: row.id,
+    slug: row.slug,
+    label: row.label,
+    description: row.description ?? null,
+    isActive: row.isActive,
+    sortOrder: row.sortOrder,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  }
 }
 
 function normalizeStatus(value: string): TicketStatus {

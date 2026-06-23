@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Mail, Phone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -15,10 +15,12 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { EmployeeAvatar } from '@/components/employees/employee-avatar'
+import { AvatarUploadField } from '@/components/profile/avatar-upload-field'
 import { cn } from '@/lib/utils'
 import { useProfile } from '@/hooks/use-profile'
 import { VacationTab } from '@/components/profile/vacation-tab'
-import type { ProfileData } from '@/types/portal'
+import type { CurrentUserResponse, ProfileData } from '@/types/portal'
 
 type ProfileTabId = 'my_profile' | 'my_department' | 'documents' | 'vacation'
 
@@ -32,13 +34,28 @@ const tabs: Array<{ id: ProfileTabId; label: string }> = [
 export function Profile({ data }: { data: ProfileData }) {
   const [activeTab, setActiveTab] = useState<ProfileTabId>('my_profile')
   const [sheetOpen, setSheetOpen] = useState(false)
-  const [phone, setPhone] = useState(data.phone ?? '')
-  const [avatarUrl, setAvatarUrl] = useState(data.avatarUrl ?? '')
-  const [status, setStatus] = useState<'office' | 'remote' | 'vacation'>(data.presence)
+  const { data: profileData, update, refetch, applyProfile, error: profileError } = useProfile()
+  const display = profileData ?? data
+
+  const [phone, setPhone] = useState(display.phone ?? '')
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [status, setStatus] = useState<'office' | 'remote' | 'vacation'>(display.presence)
   const [saving, setSaving] = useState(false)
   const [presenceSaving, setPresenceSaving] = useState(false)
   const [presenceError, setPresenceError] = useState<string | null>(null)
-  const { update, refetch, error: profileError } = useProfile()
+
+  useEffect(() => {
+    setPhone(display.phone ?? '')
+    setStatus(display.presence)
+  }, [display.phone, display.presence])
+
+  useEffect(() => {
+    if (!sheetOpen) {
+      setAvatarFile(null)
+      setUploadError(null)
+    }
+  }, [sheetOpen])
 
   const statusButtons = useMemo(
     () => [
@@ -72,19 +89,67 @@ export function Profile({ data }: { data: ProfileData }) {
 
   const handleSaveProfile = async () => {
     setSaving(true)
-    await update({
-      phone: phone || undefined,
-      avatarUrl: avatarUrl || undefined,
-    })
+    setUploadError(null)
+
+    let uploadedAvatar = false
+
+    if (avatarFile) {
+      try {
+        const formData = new FormData()
+        formData.append('file', avatarFile)
+        const response = await fetch('/api/users/me/avatar', {
+          method: 'POST',
+          body: formData,
+        })
+        const body = (await response.json().catch(() => ({}))) as CurrentUserResponse & { error?: string }
+        if (!response.ok) {
+          setUploadError(body.error ?? 'Не удалось загрузить фото')
+          setSaving(false)
+          return
+        }
+        if (body.profile) {
+          applyProfile(body.profile)
+        }
+        uploadedAvatar = true
+        setAvatarFile(null)
+      } catch {
+        setUploadError('Сетевая ошибка при загрузке фото')
+        setSaving(false)
+        return
+      }
+    }
+
+    const phoneChanged = phone !== (display.phone ?? '')
+    if (phoneChanged) {
+      const ok = await update({
+        phone: phone || undefined,
+      })
+      if (!ok) {
+        setSaving(false)
+        return
+      }
+    }
+
     setSaving(false)
     setSheetOpen(false)
+
+    if (!uploadedAvatar && !phoneChanged) {
+      await refetch()
+    }
   }
 
   return (
     <div className="space-y-6">
-      <Card className="p-6">
-        <h1 className="text-2xl font-bold text-card-foreground">{data.fullName}</h1>
-        <p className="mt-1 text-muted-foreground">{data.roleTitle}</p>
+      <Card className="flex flex-col items-center p-6 text-center">
+        <EmployeeAvatar
+          name={display.fullName}
+          initials={display.initials}
+          avatarUrl={display.avatarUrl}
+          className="h-20 w-20 text-lg"
+          imageClassName="h-20 w-20"
+        />
+        <h1 className="mt-4 text-2xl font-bold text-card-foreground">{display.fullName}</h1>
+        <p className="mt-1 text-muted-foreground">{display.roleTitle}</p>
       </Card>
 
       <div className="flex flex-wrap gap-2 border-b border-border pb-2">
@@ -125,11 +190,11 @@ export function Profile({ data }: { data: ProfileData }) {
           </div>
 
           <div className="space-y-2 text-sm">
-            <p><strong>ФИО:</strong> {data.fullName}</p>
-            <p><strong>Должность:</strong> {data.positionTitle ?? data.roleTitle}</p>
-            <p><strong>Отдел:</strong> {data.department}</p>
-            <p className="flex items-center gap-2"><Phone className="h-4 w-4" /> {data.phone}</p>
-            <p className="flex items-center gap-2"><Mail className="h-4 w-4" /> {data.email}</p>
+            <p><strong>ФИО:</strong> {display.fullName}</p>
+            <p><strong>Должность:</strong> {display.positionTitle ?? display.roleTitle}</p>
+            <p><strong>Отдел:</strong> {display.department}</p>
+            <p className="flex items-center gap-2"><Phone className="h-4 w-4" /> {display.phone}</p>
+            <p className="flex items-center gap-2"><Mail className="h-4 w-4" /> {display.email}</p>
           </div>
 
           <Button type="button" variant="outline" onClick={() => setSheetOpen(true)}>
@@ -141,42 +206,42 @@ export function Profile({ data }: { data: ProfileData }) {
       {activeTab === 'my_department' && (
         <Card className="space-y-4 p-6">
           <h2 className="font-semibold text-card-foreground">Моё подразделение</h2>
-          <p className="text-sm"><strong>Отдел:</strong> {data.departmentTab?.departmentName ?? data.department}</p>
-          {data.departmentTab?.manager ? (
+          <p className="text-sm"><strong>Отдел:</strong> {display.departmentTab?.departmentName ?? display.department}</p>
+          {display.departmentTab?.manager ? (
             <p className="text-sm">
               <strong>Руководитель:</strong>{' '}
-              <Link href={`/contacts?search=${encodeURIComponent(data.departmentTab.manager.fullName)}`} className="text-primary hover:underline">
-                {data.departmentTab.manager.fullName}
+              <Link href={`/contacts?search=${encodeURIComponent(display.departmentTab.manager.fullName)}`} className="text-primary hover:underline">
+                {display.departmentTab.manager.fullName}
               </Link>
             </p>
           ) : null}
 
-          {data.departmentTab?.regulationsDoc && (
+          {display.departmentTab?.regulationsDoc && (
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-sm font-medium">Регламент подразделения</p>
               <iframe
                 title="Превью регламента"
-                src={`/api/documents/preview/${data.departmentTab.regulationsDoc.id}`}
+                src={`/api/documents/preview/${display.departmentTab.regulationsDoc.id}`}
                 className="h-56 w-full rounded border"
               />
-              {data.departmentTab.regulationsDoc.downloadUrl && (
-                <a href={data.departmentTab.regulationsDoc.downloadUrl} className="text-sm text-primary hover:underline">
+              {display.departmentTab.regulationsDoc.downloadUrl && (
+                <a href={display.departmentTab.regulationsDoc.downloadUrl} className="text-sm text-primary hover:underline">
                   Скачать
                 </a>
               )}
             </div>
           )}
 
-          {data.departmentTab?.standardsDoc && (
+          {display.departmentTab?.standardsDoc && (
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-sm font-medium">Стандарт подразделения</p>
               <iframe
                 title="Превью стандарта"
-                src={`/api/documents/preview/${data.departmentTab.standardsDoc.id}`}
+                src={`/api/documents/preview/${display.departmentTab.standardsDoc.id}`}
                 className="h-56 w-full rounded border"
               />
-              {data.departmentTab.standardsDoc.downloadUrl && (
-                <a href={data.departmentTab.standardsDoc.downloadUrl} className="text-sm text-primary hover:underline">
+              {display.departmentTab.standardsDoc.downloadUrl && (
+                <a href={display.departmentTab.standardsDoc.downloadUrl} className="text-sm text-primary hover:underline">
                   Скачать
                 </a>
               )}
@@ -188,16 +253,16 @@ export function Profile({ data }: { data: ProfileData }) {
       {activeTab === 'documents' && (
         <Card className="space-y-4 p-6">
           <h2 className="font-semibold text-card-foreground">Документы</h2>
-          {data.documentsTab?.jobInstruction ? (
+          {display.documentsTab?.jobInstruction ? (
             <div className="space-y-3">
-              <p className="text-sm font-medium">{data.documentsTab.jobInstruction.title}</p>
+              <p className="text-sm font-medium">{display.documentsTab.jobInstruction.title}</p>
               <iframe
                 title="Должностная инструкция"
-                src={`/api/documents/preview/${data.documentsTab.jobInstruction.id}`}
+                src={`/api/documents/preview/${display.documentsTab.jobInstruction.id}`}
                 className="h-72 w-full rounded border"
               />
-              {data.documentsTab.jobInstruction.downloadUrl && (
-                <a href={data.documentsTab.jobInstruction.downloadUrl} className="text-sm text-primary hover:underline">
+              {display.documentsTab.jobInstruction.downloadUrl && (
+                <a href={display.documentsTab.jobInstruction.downloadUrl} className="text-sm text-primary hover:underline">
                   Скачать
                 </a>
               )}
@@ -223,13 +288,17 @@ export function Profile({ data }: { data: ProfileData }) {
             <SheetDescription>Вы можете изменить только фото и телефон.</SheetDescription>
           </SheetHeader>
           <div className="space-y-4 p-4">
+            <AvatarUploadField
+              name={display.fullName}
+              initials={display.initials}
+              currentAvatarUrl={display.avatarUrl}
+              file={avatarFile}
+              onFileChange={setAvatarFile}
+              error={uploadError}
+            />
             <div className="space-y-2">
               <Label htmlFor="phone">Телефон</Label>
               <Input id="phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="avatarUrl">Фото (URL)</Label>
-              <Input id="avatarUrl" value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} />
             </div>
             {profileError && <p className="text-sm text-destructive">{profileError}</p>}
           </div>

@@ -24,6 +24,7 @@ import type {
   SidebarItem,
   TicketsListResponse,
   TicketsQuery,
+  TicketCategoriesResponse,
   VacationBalance,
   VacationItem,
   VacationStatus,
@@ -89,6 +90,10 @@ export async function loadMyTickets(
 
 export async function loadAdminTickets(query?: TicketsQuery): Promise<TicketsListResponse> {
   return getPortalRepositoryServer().listAdminTickets(query)
+}
+
+export async function loadTicketCategories(activeOnly = true): Promise<TicketCategoriesResponse> {
+  return getPortalRepositoryServer().listTicketCategories(activeOnly)
 }
 
 export async function loadEventsForMonth(query: EventsMonthQuery): Promise<EventsListResponse> {

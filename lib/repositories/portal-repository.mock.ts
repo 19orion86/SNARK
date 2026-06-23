@@ -43,6 +43,9 @@ import type {
   ProfileUpdatePayload,
   Ticket,
   TicketAdminUpdatePayload,
+  TicketCategoriesResponse,
+  TicketCategoryItem,
+  TicketCategoryUpsertPayload,
   TicketCreatePayload,
   TicketsListResponse,
   TicketsQuery,
@@ -53,6 +56,7 @@ import type {
   VacationStatus,
 } from "@/types/portal"
 import type { UserRole } from "@/types/auth"
+import { DEFAULT_TICKET_CATEGORIES } from "@/lib/portal-data/ticket-categories"
 
 function delay(ms = 120): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -61,10 +65,10 @@ function delay(ms = 120): Promise<void> {
 function defaultProfileData(): ProfileData {
   return {
     userId: "mock-user-1",
-    fullName: "Иван Петров",
+    fullName: "Петров Иван",
     firstName: "Иван",
     lastName: "Петров",
-    initials: "ИП",
+    initials: "ПИ",
     roleTitle: "Руководитель проекта",
     role: "employee",
     department: "СНАРК | Инжиниринг",
@@ -139,14 +143,14 @@ const mockEmployees: Employee[] = [
   {
     id: 1,
     userId: "00000000-0000-0000-0000-000000000001",
-    name: "Александр Петров",
+    name: "Петров Александр",
     position: "Генеральный директор",
     department: "Управление",
     phone: "+7 (495) 123-45-67",
     email: "a.petrov@snark.ru",
     office: "Головной офис, каб. 101",
     status: "online",
-    avatar: "АП",
+    avatar: "ПА",
     inn: null,
     snils: null,
     birthDate: null,
@@ -165,14 +169,14 @@ const mockEmployees: Employee[] = [
   {
     id: 2,
     userId: "00000000-0000-0000-0000-000000000002",
-    name: "Елена Сидорова",
+    name: "Сидорова Елена",
     position: "Руководитель направления",
     department: "СНАРК | Проект",
     phone: "+7 (495) 123-45-68",
     email: "e.sidorova@snark.ru",
     office: "Офис проектирования, каб. 205",
     status: "online",
-    avatar: "ЕС",
+    avatar: "СЕ",
     inn: null,
     snils: null,
     birthDate: null,
@@ -191,14 +195,14 @@ const mockEmployees: Employee[] = [
   {
     id: 3,
     userId: "00000000-0000-0000-0000-000000000003",
-    name: "Иван Смирнов",
+    name: "Смирнов Иван",
     position: "Главный инженер",
     department: "СНАРК | Инжиниринг",
     phone: "+7 (495) 123-45-69",
     email: "i.smirnov@snark.ru",
     office: "Технический центр, каб. 310",
     status: "offline",
-    avatar: "ИС",
+    avatar: "СИ",
     inn: null,
     snils: null,
     birthDate: null,
@@ -360,7 +364,7 @@ export const mockPortalRepository: PortalRepository = {
     return mapDashboardData({
       welcomeName,
       quickActions: [
-        { label: "Создать заявку в ИТ", icon: "HelpCircle", href: "/support" },
+        { label: "Создать заявку", icon: "HelpCircle", href: "/support" },
         { label: "Забронировать переговорную", icon: "DoorOpen", href: "/booking" },
         { label: "Новости компании", icon: "Newspaper", href: "/news" },
         { label: "Найти сотрудника", icon: "Users", href: "/contacts" },
@@ -1053,6 +1057,59 @@ export const mockPortalRepository: PortalRepository = {
     return { ...next }
   },
 
+  async listTicketCategories(activeOnly = false): Promise<TicketCategoriesResponse> {
+    await delay(10)
+    const items = mockTicketCategories
+      .filter((item) => (activeOnly ? item.isActive : true))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, "ru"))
+    return { items: items.map((item) => ({ ...item })) }
+  },
+
+  async createTicketCategory(payload: TicketCategoryUpsertPayload): Promise<TicketCategoryItem> {
+    await delay(20)
+    const now = new Date().toISOString()
+    const item: TicketCategoryItem = {
+      id: `mock-ticket-cat-${Date.now()}`,
+      slug: payload.slug,
+      label: payload.label,
+      description: payload.description ?? null,
+      isActive: payload.isActive ?? true,
+      sortOrder: payload.sortOrder ?? mockTicketCategories.length + 1,
+      createdAt: now,
+      updatedAt: now,
+    }
+    mockTicketCategories.push(item)
+    return { ...item }
+  },
+
+  async updateTicketCategory(
+    id: string,
+    payload: Partial<TicketCategoryUpsertPayload>
+  ): Promise<TicketCategoryItem> {
+    await delay(20)
+    const index = mockTicketCategories.findIndex((item) => item.id === id)
+    if (index === -1) throw new Error("Категория не найдена")
+    const current = mockTicketCategories[index]
+    const next: TicketCategoryItem = {
+      ...current,
+      slug: payload.slug ?? current.slug,
+      label: payload.label ?? current.label,
+      description: payload.description !== undefined ? payload.description ?? null : current.description,
+      isActive: payload.isActive ?? current.isActive,
+      sortOrder: payload.sortOrder ?? current.sortOrder,
+      updatedAt: new Date().toISOString(),
+    }
+    mockTicketCategories[index] = next
+    return { ...next }
+  },
+
+  async deleteTicketCategory(id: string): Promise<void> {
+    await delay(10)
+    const index = mockTicketCategories.findIndex((item) => item.id === id)
+    if (index === -1) throw new Error("Категория не найдена")
+    mockTicketCategories.splice(index, 1)
+  },
+
   async listMyVacations(userId: string): Promise<VacationItem[]> {
     await delay(10)
     return mockVacations
@@ -1585,6 +1642,17 @@ function createDepartmentMutationError(message: string, code: string): Error & {
 const mockEvents: CalendarEvent[] = []
 
 const mockTickets: Ticket[] = []
+
+const mockTicketCategories: TicketCategoryItem[] = DEFAULT_TICKET_CATEGORIES.map((item, index) => ({
+  id: `mock-ticket-cat-${index + 1}`,
+  slug: item.slug,
+  label: item.label,
+  description: item.description ?? null,
+  isActive: item.isActive ?? true,
+  sortOrder: item.sortOrder ?? index + 1,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+}))
 
 const mockVacations: VacationItem[] = []
 

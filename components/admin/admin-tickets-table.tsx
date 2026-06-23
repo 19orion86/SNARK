@@ -12,15 +12,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { ticketCategoryLabel } from "@/lib/portal-data/ticket-categories"
 import {
-  TICKET_CATEGORY_LABEL,
   TICKET_PRIORITY_LABEL,
   TICKET_STATUS_LABEL,
 } from "@/lib/portal-data/tickets-ui"
-import type { TicketsListResponse } from "@/types/portal"
+import type { TicketCategoriesResponse, TicketsListResponse } from "@/types/portal"
 
 interface AdminTicketsTableProps {
   initial: TicketsListResponse
+  categories: TicketCategoriesResponse["items"]
   currentAdminId: string
 }
 
@@ -38,7 +39,7 @@ function formatDate(value: string): string {
   }
 }
 
-export function AdminTicketsTable({ initial, currentAdminId }: AdminTicketsTableProps) {
+export function AdminTicketsTable({ initial, categories, currentAdminId }: AdminTicketsTableProps) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -112,7 +113,7 @@ export function AdminTicketsTable({ initial, currentAdminId }: AdminTicketsTable
                     <TableCell className="max-w-[320px] whitespace-normal font-medium">
                       {ticket.subject}
                     </TableCell>
-                    <TableCell>{TICKET_CATEGORY_LABEL[ticket.category]}</TableCell>
+                    <TableCell>{ticketCategoryLabel(ticket.category, categories)}</TableCell>
                     <TableCell>
                       <span
                         className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusMeta.classes}`}

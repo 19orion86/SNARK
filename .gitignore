@@ -17,6 +17,9 @@ node_modules
 tsconfig.tsbuildinfo
 ecosystem.config.js
 
+# User uploads
+public/uploads/
+
 # Python protocol service runtime data
 services/protocols/static/meetings/enc_*
 services/protocols/static/meetings/*.webm

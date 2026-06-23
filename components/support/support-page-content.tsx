@@ -22,23 +22,25 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
+import { ticketCategoryLabel } from "@/lib/portal-data/ticket-categories"
 import {
-  TICKET_CATEGORY_LABEL,
   TICKET_PRIORITY_LABEL,
   TICKET_STATUS_LABEL,
 } from "@/lib/portal-data/tickets-ui"
 import type {
   Ticket,
   TicketCategory,
+  TicketCategoryItem,
   TicketPriority,
   TicketsListResponse,
 } from "@/types/portal"
 
 interface SupportPageContentProps {
   initial: TicketsListResponse
+  categories: TicketCategoryItem[]
+  defaultCategory?: TicketCategory
 }
 
-const CATEGORY_OPTIONS: TicketCategory[] = ["it", "aho", "hr", "other"]
 const PRIORITY_OPTIONS: TicketPriority[] = ["low", "medium", "high"]
 
 function formatDate(value: string): string {
@@ -55,10 +57,11 @@ function formatDate(value: string): string {
   }
 }
 
-export function SupportPageContent({ initial }: SupportPageContentProps) {
+export function SupportPageContent({ initial, categories, defaultCategory }: SupportPageContentProps) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  const [category, setCategory] = useState<TicketCategory>("it")
+  const firstCategory = categories[0]?.slug ?? "it"
+  const [category, setCategory] = useState<TicketCategory>(defaultCategory ?? firstCategory)
   const [priority, setPriority] = useState<TicketPriority>("medium")
   const [subject, setSubject] = useState("")
   const [description, setDescription] = useState("")
@@ -116,38 +119,37 @@ export function SupportPageContent({ initial }: SupportPageContentProps) {
           решением как можно быстрее.
         </p>
 
-        <form onSubmit={onSubmit} className="mt-6 space-y-4" aria-busy={submitting}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="ticket-category">Категория</Label>
-              <Select value={category} onValueChange={(value) => setCategory(value as TicketCategory)}>
-                <SelectTrigger id="ticket-category">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORY_OPTIONS.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {TICKET_CATEGORY_LABEL[value]}
+        <form onSubmit={onSubmit} className="mt-6 max-w-2xl space-y-4" aria-busy={submitting}>
+          <div className="space-y-2">
+            <Label htmlFor="ticket-category">Категория</Label>
+            <Select value={category} onValueChange={(value) => setCategory(value as TicketCategory)}>
+              <SelectTrigger id="ticket-category">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                  {categories.map((value) => (
+                    <SelectItem key={value.slug} value={value.slug}>
+                      {value.label}
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="ticket-priority">Приоритет</Label>
-              <Select value={priority} onValueChange={(value) => setPriority(value as TicketPriority)}>
-                <SelectTrigger id="ticket-priority">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRIORITY_OPTIONS.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {TICKET_PRIORITY_LABEL[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="ticket-priority">Приоритет</Label>
+            <Select value={priority} onValueChange={(value) => setPriority(value as TicketPriority)}>
+              <SelectTrigger id="ticket-priority">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PRIORITY_OPTIONS.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {TICKET_PRIORITY_LABEL[value]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
@@ -214,7 +216,7 @@ export function SupportPageContent({ initial }: SupportPageContentProps) {
                       <TableCell className="max-w-[320px] whitespace-normal font-medium">
                         {ticket.subject}
                       </TableCell>
-                      <TableCell>{TICKET_CATEGORY_LABEL[ticket.category]}</TableCell>
+                      <TableCell>{ticketCategoryLabel(ticket.category, categories)}</TableCell>
                       <TableCell>
                         <span
                           className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusMeta.classes}`}

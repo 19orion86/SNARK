@@ -50,6 +50,16 @@ export async function POST(request: NextRequest) {
       })
       return NextResponse.json(payload, { status: 400 })
     }
+
+    const categories = await getPortalRepositoryServer().listTicketCategories(true)
+    const categoryExists = categories.items.some((item) => item.slug === parsed.data.category)
+    if (!categoryExists) {
+      return NextResponse.json(
+        apiErrorSchema.parse({ error: "Выбрана недоступная категория", code: "INVALID_CATEGORY" }),
+        { status: 400 }
+      )
+    }
+
     const created = await getPortalRepositoryServer().createTicket({
       ...parsed.data,
       authorId: auth.userId,

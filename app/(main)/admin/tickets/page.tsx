@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { AdminTicketsTable } from "@/components/admin/admin-tickets-table"
 import { getServerSession } from "@/lib/auth/server-session"
-import { loadAdminTickets } from "@/lib/portal-data/loaders"
+import { loadAdminTickets, loadTicketCategories } from "@/lib/portal-data/loaders"
 
 export const dynamic = "force-dynamic"
 
@@ -17,6 +17,15 @@ export default async function AdminTicketsPage() {
   if (session.role !== "admin") {
     redirect("/admin")
   }
-  const data = await loadAdminTickets({ page: 1, limit: 50 })
-  return <AdminTicketsTable initial={data} currentAdminId={session.userId} />
+  const [data, categories] = await Promise.all([
+    loadAdminTickets({ page: 1, limit: 50 }),
+    loadTicketCategories(false),
+  ])
+  return (
+    <AdminTicketsTable
+      initial={data}
+      categories={categories.items}
+      currentAdminId={session.userId}
+    />
+  )
 }

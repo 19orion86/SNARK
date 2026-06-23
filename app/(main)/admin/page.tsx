@@ -47,11 +47,14 @@ export default async function AdminPage() {
         <Card className="p-6">
           <h2 className="text-lg font-semibold text-card-foreground">Заявки</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Список всех заявок сотрудников: ИТ, АХО, HR. Можно взять заявку в работу одной кнопкой.
+            Список всех заявок сотрудников. Можно взять заявку в работу одной кнопкой.
           </p>
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-2">
             <Link href="/admin/tickets">
-              <Button className="bg-[#16223b] hover:bg-[#16223b]/90">Открыть раздел</Button>
+              <Button className="bg-[#16223b] hover:bg-[#16223b]/90">Список заявок</Button>
+            </Link>
+            <Link href="/admin/support-categories">
+              <Button variant="outline">Категории поддержки</Button>
             </Link>
           </div>
         </Card>

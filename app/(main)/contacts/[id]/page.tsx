@@ -12,29 +12,18 @@ import {
   User,
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
+import { EmployeeAvatar } from "@/components/employees/employee-avatar"
+import {
+  employeeStatusBadgeClasses,
+  employeeStatusDotColor,
+  employeeStatusLabel,
+} from "@/lib/portal-data/presence-ui"
 import { loadEmployeeById } from "@/lib/portal-data/loaders"
-import type { Employee } from "@/types/portal"
 
 export const dynamic = "force-dynamic"
 
 interface Props {
   params: Promise<{ id: string }>
-}
-
-interface PresenceBadge {
-  label: string
-  classes: string
-  dot: string
-}
-
-function presenceBadge(status: Employee["status"]): PresenceBadge {
-  if (status === "online") {
-    return { label: "В офисе", classes: "bg-success/15 text-success", dot: "bg-success" }
-  }
-  if (status === "away") {
-    return { label: "В отпуске", classes: "bg-accent/15 text-accent", dot: "bg-accent" }
-  }
-  return { label: "На удалёнке", classes: "bg-primary/15 text-primary", dot: "bg-primary" }
 }
 
 function formatDateRu(iso?: string | null): string | null {
@@ -73,7 +62,6 @@ export default async function EmployeeDetailPage({ params }: Props) {
     )
   }
 
-  const badge = presenceBadge(item.status)
   const hireDate = formatDateRu(item.hireDate)
   const birthDate = formatDateRu(item.birthDate)
   const hasPhone = hasValue(item.phone)
@@ -90,31 +78,31 @@ export default async function EmployeeDetailPage({ params }: Props) {
         Назад к справочнику
       </Link>
 
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">Карточка сотрудника</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Контактная информация и сведения о подразделении
+        </p>
+      </div>
+
       <div className="grid gap-6 md:grid-cols-3">
         <Card className="flex flex-col items-center p-6 text-center md:col-span-1">
-          <div className="relative">
-            {item.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={item.avatarUrl}
-                alt={`Фото сотрудника ${item.name}`}
-                className="h-[120px] w-[120px] rounded-full object-cover"
-              />
-            ) : (
-              <div className="flex h-[120px] w-[120px] items-center justify-center rounded-full bg-secondary text-3xl font-bold text-secondary-foreground">
-                {item.avatar}
-              </div>
-            )}
-          </div>
+          <EmployeeAvatar
+            name={item.name}
+            initials={item.avatar}
+            avatarUrl={item.avatarUrl}
+            className="h-[120px] w-[120px] text-3xl"
+            imageClassName="h-[120px] w-[120px]"
+          />
 
-          <h1 className="mt-4 text-xl font-bold text-foreground">{item.name}</h1>
+          <h2 className="mt-4 text-xl font-bold text-foreground">{item.name}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{item.position}</p>
 
           <span
-            className={`mt-4 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${badge.classes}`}
+            className={`mt-4 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${employeeStatusBadgeClasses(item.status)}`}
           >
-            <span className={`h-2 w-2 rounded-full ${badge.dot}`} aria-hidden="true" />
-            {badge.label}
+            <span className={`h-2 w-2 rounded-full ${employeeStatusDotColor(item.status)}`} aria-hidden="true" />
+            {employeeStatusLabel(item.status)}
           </span>
 
           <div className="mt-6 flex w-full flex-col gap-2">

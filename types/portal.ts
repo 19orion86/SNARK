@@ -545,7 +545,30 @@ export interface NewsCoverUploadResponse {
   expiresAt: string
 }
 
-export type TicketCategory = "it" | "aho" | "hr" | "other"
+export type TicketCategory = string
+
+export interface TicketCategoryItem {
+  id: string
+  slug: string
+  label: string
+  description: string | null
+  isActive: boolean
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TicketCategoriesResponse {
+  items: TicketCategoryItem[]
+}
+
+export interface TicketCategoryUpsertPayload {
+  slug: string
+  label: string
+  description?: string | null
+  isActive?: boolean
+  sortOrder?: number
+}
 export type TicketStatus = "new" | "in_progress" | "resolved" | "closed"
 export type TicketPriority = "low" | "medium" | "high" | "critical"
 

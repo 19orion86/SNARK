@@ -207,7 +207,18 @@ export const documentsResponseSchema = z.object({
 
 export const profileUpdateSchema = z.object({
   phone: z.string().trim().max(40).optional(),
-  avatarUrl: z.string().trim().url().optional(),
+  avatarUrl: z
+    .string()
+    .trim()
+    .max(2048)
+    .refine(
+      (value) =>
+        value.length === 0 ||
+        /^https?:\/\/.+/i.test(value) ||
+        value.startsWith("/uploads/avatars/"),
+      { message: "Некорректная ссылка на фото" }
+    )
+    .optional(),
 })
 
 export const profilePresenceSchema = z.object({
@@ -574,7 +585,37 @@ export const newsCoverUploadResponseSchema = z.object({
   expiresAt: z.string(),
 })
 
-export const ticketCategoryEnum = z.enum(["it", "aho", "hr", "other"])
+export const ticketCategorySlugSchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(32)
+  .regex(/^[a-z0-9_-]+$/, "Код: латиница, цифры, _ и -")
+
+export const ticketCategoryUpsertSchema = z.object({
+  slug: ticketCategorySlugSchema,
+  label: z.string().trim().min(2).max(80),
+  description: z.string().trim().max(500).nullable().optional(),
+  isActive: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).max(999).optional(),
+})
+
+export const ticketCategoryItemSchema = z.object({
+  id: z.string().uuid(),
+  slug: z.string(),
+  label: z.string(),
+  description: z.string().nullable(),
+  isActive: z.boolean(),
+  sortOrder: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export const ticketCategoriesResponseSchema = z.object({
+  items: z.array(ticketCategoryItemSchema),
+})
+
+export const ticketCategoryEnum = ticketCategorySlugSchema
 export const ticketStatusEnum = z.enum(["new", "in_progress", "resolved", "closed"])
 export const ticketPriorityEnum = z.enum(["low", "medium", "high", "critical"])
 

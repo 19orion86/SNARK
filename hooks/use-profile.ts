@@ -49,5 +49,5 @@ export function useProfile() {
     }
   }
 
-  return { data, isLoading, error, refetch, update }
+  return { data, isLoading, error, refetch, update, applyProfile: setData }
 }

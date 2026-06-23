@@ -24,16 +24,16 @@ const USERS_TO_CREATE: UserSeed[] = [
   {
     email: "admin@snark.ru",
     password: "Admin2026Snark!",
-    firstName: "Администратор",
-    lastName: "Портала",
+    firstName: "Админ",
+    lastName: "Тест",
     role: "admin",
     positionTitle: "Администратор системы",
   },
   {
     email: "hr@snark.ru",
     password: "HR2026Snark!",
-    firstName: "HR",
-    lastName: "Менеджер",
+    firstName: "Анна",
+    lastName: "Петрова",
     role: "hr_manager",
     positionTitle: "HR менеджер",
     phone: "+7 (900) 000-00-01",
@@ -41,8 +41,8 @@ const USERS_TO_CREATE: UserSeed[] = [
   {
     email: "employee@snark.ru",
     password: "Employee2026!",
-    firstName: "Тестовый",
-    lastName: "Сотрудник",
+    firstName: "Иван",
+    lastName: "Сидоров",
     role: "employee",
     positionTitle: "Специалист",
     phone: "+7 (900) 000-00-02",
@@ -68,7 +68,11 @@ async function main() {
         .limit(1)
 
       if (existing) {
-        console.log(`⏭  Пропущен (уже есть): ${u.email}`)
+        await db
+          .update(users)
+          .set({ firstName: u.firstName, lastName: u.lastName })
+          .where(eq(users.email, u.email))
+        console.log(`🔄 Обновлены ФИО: ${u.email}`)
         skipped++
         continue
       }

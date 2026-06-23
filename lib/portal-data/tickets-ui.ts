@@ -1,4 +1,4 @@
-import type { TicketCategory, TicketPriority, TicketStatus } from "@/types/portal"
+import type { TicketPriority, TicketStatus } from "@/types/portal"
 
 export const TICKET_STATUS_LABEL: Record<TicketStatus, { label: string; classes: string }> = {
   new: { label: "Новая", classes: "bg-primary/15 text-primary" },
@@ -7,7 +7,7 @@ export const TICKET_STATUS_LABEL: Record<TicketStatus, { label: string; classes:
   closed: { label: "Закрыта", classes: "bg-muted text-muted-foreground" },
 }
 
-export const TICKET_CATEGORY_LABEL: Record<TicketCategory, string> = {
+export const TICKET_CATEGORY_LABEL: Record<string, string> = {
   it: "ИТ-поддержка",
   aho: "АХО",
   hr: "HR",

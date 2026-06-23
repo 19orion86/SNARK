@@ -40,6 +40,9 @@ import type {
   SidebarItem,
   Ticket,
   TicketAdminUpdatePayload,
+  TicketCategoriesResponse,
+  TicketCategoryItem,
+  TicketCategoryUpsertPayload,
   TicketCreatePayload,
   TicketsListResponse,
   TicketsQuery,
@@ -107,6 +110,13 @@ export interface PortalRepository {
   ): Promise<{ item: Ticket | null }>
   createTicket(payload: TicketCreatePayload & { authorId: string }): Promise<Ticket>
   updateAdminTicket(id: string, payload: TicketAdminUpdatePayload): Promise<Ticket>
+  listTicketCategories(activeOnly?: boolean): Promise<TicketCategoriesResponse>
+  createTicketCategory(payload: TicketCategoryUpsertPayload): Promise<TicketCategoryItem>
+  updateTicketCategory(
+    id: string,
+    payload: Partial<TicketCategoryUpsertPayload>
+  ): Promise<TicketCategoryItem>
+  deleteTicketCategory(id: string): Promise<void>
   listEventsForMonth(query: EventsMonthQuery): Promise<EventsListResponse>
   createEvent(payload: EventCreatePayload & { createdBy: string }): Promise<CalendarEvent>
   deleteEvent(id: string): Promise<void>
