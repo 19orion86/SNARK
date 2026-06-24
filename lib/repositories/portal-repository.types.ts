@@ -51,7 +51,11 @@ import type {
   VacationCreatePayload,
   VacationItem,
   VacationStatus,
+  OrgStructureImportOptions,
+  OrgStructureImportPreview,
+  OrgStructureImportResult,
 } from "@/types/portal"
+import type { ParsedOrgStructure } from "@/lib/import/one-c-staffing-parser"
 import type { UserRole } from "@/types/auth"
 
 export interface PortalRepository {
@@ -86,6 +90,11 @@ export interface PortalRepository {
   hideAdminEmployee(id: string, hidden: boolean): Promise<AdminEmployeeItem>
   deleteAdminEmployee(id: string): Promise<void>
   importEmployees(rows: AdminEmployeeUpsertPayload[]): Promise<EmployeeImportResult>
+  previewOrgStructureImport(parsed: ParsedOrgStructure): Promise<OrgStructureImportPreview>
+  importOrgStructure(
+    parsed: ParsedOrgStructure,
+    options: OrgStructureImportOptions
+  ): Promise<OrgStructureImportResult>
   listAdminPortalUsers(): Promise<AdminPortalUsersResponse>
   getAdminPortalUserById(id: string): Promise<AdminPortalUserItem | null>
   createAdminPortalUser(payload: AdminPortalUserCreatePayload): Promise<AdminPortalUserItem>

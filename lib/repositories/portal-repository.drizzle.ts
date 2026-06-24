@@ -9,6 +9,7 @@ import {
   events,
   knowledgeArticles,
   news,
+  orgImportRuns,
   tickets,
   ticketCategories,
   users,
@@ -17,6 +18,12 @@ import {
 import { hashPassword } from "@/lib/auth/password"
 import { revokeAllRefreshTokensForUser } from "@/lib/auth/session"
 import { formatFullName, formatInitials } from "@/lib/portal-data/format-name"
+import { buildOrgStructureImportPreview } from "@/lib/import/org-structure-diff"
+import {
+  fuzzyMatchDepartment,
+  normalizeDepartmentKey,
+  type ParsedOrgStructure,
+} from "@/lib/import/one-c-staffing-parser"
 import { mapContactsData, mapDocumentsData, mapProfileData } from "@/lib/mappers/portal"
 import { mockPortalRepository } from "@/lib/repositories/portal-repository.mock"
 import { listMyDashboardTasks } from "@/lib/repositories/tasks.repository"
@@ -47,6 +54,9 @@ import type {
   EventCreatePayload,
   EventsListResponse,
   EventsMonthQuery,
+  OrgStructureImportOptions,
+  OrgStructureImportPreview,
+  OrgStructureImportResult,
   KnowledgeArticle,
   KnowledgeCategory,
   KnowledgeDetailResponse,
@@ -98,6 +108,33 @@ function parseFullName(fullName: string): { firstName: string; lastName: string;
     lastName: lastName || "Неизвестно",
     middleName: rest.length > 0 ? rest.join(" ") : null,
   }
+}
+
+function employeeNameKey(parts: {
+  lastName: string
+  firstName: string
+  middleName: string | null
+}): string {
+  return normalizeDepartmentKey(
+    [parts.lastName, parts.firstName, parts.middleName].filter(Boolean).join(" ")
+  )
+}
+
+function resolveDepartmentId(
+  departmentName: string,
+  departments: AdminDepartmentItem[]
+): string | null {
+  const direct = departments.find(
+    (dept) => normalizeDepartmentKey(dept.name) === normalizeDepartmentKey(departmentName)
+  )
+  if (direct) return direct.id
+
+  const matchedName = fuzzyMatchDepartment(
+    departmentName,
+    new Set(departments.map((dept) => dept.name))
+  )
+  if (!matchedName) return null
+  return departments.find((dept) => dept.name === matchedName)?.id ?? null
 }
 
 function mapStatusToPresence(status: AdminEmployeeUpsertPayload["status"]): string {
@@ -696,6 +733,7 @@ export const drizzlePortalRepository: PortalRepository = {
         code: departments.code,
         description: departments.description,
         parentId: departments.parentId,
+        plannedHeadcount: departments.plannedHeadcount,
         headUserId: departments.headUserId,
         headFirstName: users.firstName,
         headLastName: users.lastName,
@@ -706,6 +744,7 @@ export const drizzlePortalRepository: PortalRepository = {
       .from(departments)
       .leftJoin(users, eq(users.id, departments.headUserId))
       .leftJoin(employeeProfiles, eq(employeeProfiles.userId, departments.headUserId))
+      .where(eq(departments.isArchived, false))
 
     const counts = await db
       .select({ departmentId: users.departmentId, value: count() })
@@ -739,6 +778,7 @@ export const drizzlePortalRepository: PortalRepository = {
               }
             : null,
         employeeCount: countByDept.get(row.id) ?? 0,
+        plannedHeadcount: row.plannedHeadcount ?? null,
         children: [],
         parentId: row.parentId,
       })
@@ -2181,10 +2221,14 @@ export const drizzlePortalRepository: PortalRepository = {
         headFirstName: headAlias.firstName,
         headLastName: headAlias.lastName,
         contactEmail: departments.contactEmail,
+        plannedHeadcount: departments.plannedHeadcount,
+        externalKey: departments.externalKey,
+        isArchived: departments.isArchived,
       })
       .from(departments)
       .leftJoin(parentAlias, eq(parentAlias.id, departments.parentId))
       .leftJoin(headAlias, eq(headAlias.id, departments.headUserId))
+      .where(eq(departments.isArchived, false))
       .orderBy(asc(departments.name))
 
     const counts = await db
@@ -2209,6 +2253,9 @@ export const drizzlePortalRepository: PortalRepository = {
       headName: fullName(row.headLastName, row.headFirstName) || null,
       contactEmail: row.contactEmail ?? null,
       employeeCount: countById.get(row.id) ?? 0,
+      plannedHeadcount: row.plannedHeadcount ?? null,
+      externalKey: row.externalKey ?? null,
+      isArchived: row.isArchived ?? false,
     }))
 
     return { items }
@@ -2330,6 +2377,221 @@ export const drizzlePortalRepository: PortalRepository = {
     }
 
     await db.delete(departments).where(eq(departments.id, id))
+  },
+
+  async previewOrgStructureImport(parsed: ParsedOrgStructure): Promise<OrgStructureImportPreview> {
+    const [departmentsList, employeesList] = await Promise.all([
+      this.listAdminDepartments(),
+      this.listAdminEmployees(),
+    ])
+
+    return buildOrgStructureImportPreview(
+      parsed,
+      departmentsList.items,
+      employeesList.items.map((employee) => ({
+        fullName: employee.fullName,
+        departmentName: employee.departmentName,
+        positionTitle: employee.positionTitle,
+        startDate: employee.startDate,
+      }))
+    )
+  },
+
+  async importOrgStructure(
+    parsed: ParsedOrgStructure,
+    options: OrgStructureImportOptions
+  ): Promise<OrgStructureImportResult> {
+    let departmentsCreated = 0
+    let departmentsUpdated = 0
+    let employeesCreated = 0
+    let employeesUpdated = 0
+    let employeesNotFound = 0
+    const warnings = [...parsed.warnings]
+
+    if (options.applyDepartments) {
+      const existing = await this.listAdminDepartments()
+      const idByExternalKey = new Map<string, string>()
+      const idByName = new Map<string, string>()
+
+      for (const item of existing.items) {
+        if (item.externalKey) idByExternalKey.set(item.externalKey, item.id)
+        idByName.set(normalizeDepartmentKey(item.name), item.id)
+      }
+
+      for (const incoming of parsed.departments) {
+        const existingId =
+          idByExternalKey.get(incoming.externalKey) ?? idByName.get(normalizeDepartmentKey(incoming.name))
+
+        if (existingId) {
+          await db
+            .update(departments)
+            .set({
+              name: incoming.name,
+              externalKey: incoming.externalKey,
+              plannedHeadcount: incoming.plannedHeadcount,
+              isArchived: false,
+            })
+            .where(eq(departments.id, existingId))
+          departmentsUpdated += 1
+          idByExternalKey.set(incoming.externalKey, existingId)
+          idByName.set(normalizeDepartmentKey(incoming.name), existingId)
+        } else {
+          const [created] = await db
+            .insert(departments)
+            .values({
+              name: incoming.name,
+              externalKey: incoming.externalKey,
+              plannedHeadcount: incoming.plannedHeadcount,
+              isArchived: false,
+            })
+            .returning({ id: departments.id })
+          if (created) {
+            departmentsCreated += 1
+            idByExternalKey.set(incoming.externalKey, created.id)
+            idByName.set(normalizeDepartmentKey(incoming.name), created.id)
+          }
+        }
+      }
+
+      for (const incoming of parsed.departments) {
+        const departmentId =
+          idByExternalKey.get(incoming.externalKey) ?? idByName.get(normalizeDepartmentKey(incoming.name))
+        if (!departmentId) continue
+
+        const parentId = incoming.parentName
+          ? (idByName.get(normalizeDepartmentKey(incoming.parentName)) ?? null)
+          : null
+
+        if (incoming.parentName && !parentId) {
+          warnings.push(`Не найден родитель «${incoming.parentName}» для «${incoming.name}»`)
+        }
+
+        await db.update(departments).set({ parentId }).where(eq(departments.id, departmentId))
+      }
+    }
+
+    if (options.applyEmployees) {
+      const departmentsList = await this.listAdminDepartments()
+      const processedNames = new Set<string>()
+
+      const existingUsers = await db
+        .select({
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          middleName: employeeProfiles.middleName,
+        })
+        .from(users)
+        .leftJoin(employeeProfiles, eq(employeeProfiles.userId, users.id))
+
+      const existingUserIdByName = new Map<string, string>()
+      for (const user of existingUsers) {
+        existingUserIdByName.set(
+          employeeNameKey({
+            lastName: user.lastName,
+            firstName: user.firstName,
+            middleName: user.middleName ?? null,
+          }),
+          user.id
+        )
+      }
+
+      const bulkImportPasswordHash = await hashPassword(crypto.randomUUID())
+
+      for (const assignment of parsed.assignments) {
+        const nameParts = parseFullName(assignment.fullName)
+        const nameKey = employeeNameKey(nameParts)
+        if (processedNames.has(nameKey)) continue
+        processedNames.add(nameKey)
+
+        const departmentId = resolveDepartmentId(assignment.departmentName, departmentsList.items)
+        if (!departmentId) {
+          warnings.push(`Не найден отдел «${assignment.departmentName}» для «${assignment.fullName}»`)
+          employeesNotFound += 1
+          continue
+        }
+
+        const existingUserId = existingUserIdByName.get(nameKey)
+        const now = new Date()
+
+        if (!existingUserId) {
+          const email = generatePlaceholderEmail()
+          const [createdUser] = await db
+            .insert(users)
+            .values({
+              email,
+              passwordHash: bulkImportPasswordHash,
+              firstName: nameParts.firstName,
+              lastName: nameParts.lastName,
+              role: "employee",
+              departmentId,
+              isActive: true,
+            })
+            .returning({ id: users.id })
+
+          if (!createdUser) {
+            employeesNotFound += 1
+            continue
+          }
+
+          await db.insert(employeeProfiles).values({
+            userId: createdUser.id,
+            middleName: nameParts.middleName,
+            positionTitle: assignment.positionTitle,
+            startDate: assignment.hireDate ?? null,
+            phone: assignment.phone ?? null,
+            presence: "office",
+            updatedAt: now,
+          })
+
+          existingUserIdByName.set(nameKey, createdUser.id)
+          employeesCreated += 1
+          continue
+        }
+
+        await db
+          .update(users)
+          .set({ departmentId, updatedAt: now })
+          .where(eq(users.id, existingUserId))
+
+        await db
+          .update(employeeProfiles)
+          .set({
+            positionTitle: assignment.positionTitle,
+            ...(assignment.hireDate ? { startDate: assignment.hireDate } : {}),
+            ...(assignment.phone ? { phone: assignment.phone } : {}),
+            updatedAt: now,
+          })
+          .where(eq(employeeProfiles.userId, existingUserId))
+
+        employeesUpdated += 1
+      }
+    }
+
+    await db.insert(orgImportRuns).values({
+      userId: options.userId ?? null,
+      fileName: options.fileName ?? null,
+      syncMode: options.syncMode ?? "merge",
+      applyDepartments: options.applyDepartments,
+      applyEmployees: options.applyEmployees,
+      stats: JSON.stringify({
+        departmentsCreated,
+        departmentsUpdated,
+        employeesCreated,
+        employeesUpdated,
+        employeesNotFound,
+      }),
+      warningsCount: warnings.length,
+    })
+
+    return {
+      departmentsCreated,
+      departmentsUpdated,
+      employeesCreated,
+      employeesUpdated,
+      employeesNotFound,
+      warnings,
+    }
   },
 
   async listAdminPortalUsers(): Promise<AdminPortalUsersResponse> {

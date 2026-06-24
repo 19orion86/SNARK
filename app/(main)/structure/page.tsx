@@ -1,5 +1,4 @@
-import { Building2 } from "lucide-react"
-import { DepartmentTree } from "@/components/structure/department-tree"
+import { StructureView } from "@/components/structure/structure-view"
 import { loadDepartmentsTree } from "@/lib/portal-data/loaders"
 
 export const metadata = {
@@ -18,14 +17,7 @@ export default async function StructurePage() {
         </p>
       </header>
 
-      {departments.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card py-16 text-center">
-          <Building2 className="mb-3 h-12 w-12 text-muted-foreground/50" aria-hidden="true" />
-          <p className="text-sm text-muted-foreground">Структура пока не настроена</p>
-        </div>
-      ) : (
-        <DepartmentTree nodes={departments} />
-      )}
+      <StructureView nodes={departments} />
     </div>
   )
 }

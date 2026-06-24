@@ -812,6 +812,44 @@ export const mockPortalRepository: PortalRepository = {
     return { created, updated, errors }
   },
 
+  async previewOrgStructureImport(parsed) {
+    await delay()
+    const { buildOrgStructureImportPreview } = await import("@/lib/import/org-structure-diff")
+    const departments = await this.listAdminDepartments()
+    const employees = await this.listAdminEmployees()
+    return buildOrgStructureImportPreview(
+      parsed,
+      departments.items,
+      employees.items.map((employee) => ({
+        fullName: employee.fullName,
+        departmentName: employee.departmentName,
+        positionTitle: employee.positionTitle,
+        startDate: employee.startDate,
+      }))
+    )
+  },
+
+  async importOrgStructure(parsed, options) {
+    await delay()
+    const preview = await this.previewOrgStructureImport(parsed)
+    return {
+      departmentsCreated: options.applyDepartments
+        ? preview.departmentDiff.filter((item) => item.action === "create").length
+        : 0,
+      departmentsUpdated: options.applyDepartments
+        ? preview.departmentDiff.filter((item) => item.action === "update").length
+        : 0,
+      employeesCreated: options.applyEmployees
+        ? preview.employeeDiff.filter((item) => item.action === "create").length
+        : 0,
+      employeesUpdated: options.applyEmployees
+        ? preview.employeeDiff.filter((item) => item.action === "update").length
+        : 0,
+      employeesNotFound: 0,
+      warnings: parsed.warnings,
+    }
+  },
+
   async getNewsList(query?: NewsListQuery, includeDrafts = false): Promise<NewsListResponse> {
     await delay()
     const page = query?.page ?? 1
@@ -941,6 +979,7 @@ export const mockPortalRepository: PortalRepository = {
             }
           : null,
         employeeCount: countByName.get(dept.name) ?? 0,
+        plannedHeadcount: null,
         children: [],
         parentId: dept.parentId,
       })
@@ -1626,6 +1665,9 @@ function buildAdminDepartmentItem(dept: MockDepartment): AdminDepartmentItem {
     headName: head?.name ?? null,
     contactEmail: dept.contactEmail ?? null,
     employeeCount,
+    plannedHeadcount: null,
+    externalKey: null,
+    isArchived: false,
   }
 }
 

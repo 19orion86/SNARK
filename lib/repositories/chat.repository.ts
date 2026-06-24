@@ -2,7 +2,8 @@ import "server-only"
 import { and, desc, eq, gt, inArray, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { db } from "@/lib/db/client"
-import { chatChannelMembers, chatChannels, chatMessages, users } from "@/lib/db/schema"
+import { chatChannelMembers, chatChannels, chatMessages, employeeProfiles, users } from "@/lib/db/schema"
+import { formatFullName } from "@/lib/portal-data/format-name"
 import type {
   ChatChannel,
   ChatChannelCreatePayload,
@@ -34,7 +35,7 @@ function mapMessage(row: {
     id: row.id,
     channelId: row.channelId,
     authorId: row.authorId,
-    authorName: `${row.authorLastName} ${row.authorFirstName}`.trim(),
+    authorName: formatFullName(row.authorLastName, row.authorFirstName),
     body: row.body,
     createdAt: row.createdAt.toISOString(),
     editedAt: row.editedAt ? row.editedAt.toISOString() : null,
@@ -106,6 +107,28 @@ export async function listMyChannels(userId: string): Promise<ChatChannelsListRe
       unreadCount = Number(unreadRow?.value ?? 0)
     }
 
+    let peerId: string | null = null
+    let peerName: string | null = null
+    if (channel.type === "direct") {
+      const members = await db
+        .select({
+          userId: chatChannelMembers.userId,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          middleName: employeeProfiles.middleName,
+        })
+        .from(chatChannelMembers)
+        .innerJoin(users, eq(users.id, chatChannelMembers.userId))
+        .leftJoin(employeeProfiles, eq(employeeProfiles.userId, users.id))
+        .where(eq(chatChannelMembers.channelId, channel.id))
+
+      const peer = members.find((member) => member.userId !== userId)
+      if (peer) {
+        peerId = peer.userId
+        peerName = formatFullName(peer.lastName, peer.firstName, peer.middleName)
+      }
+    }
+
     items.push({
       id: channel.id,
       name: channel.name,
@@ -115,6 +138,8 @@ export async function listMyChannels(userId: string): Promise<ChatChannelsListRe
       memberCount: Number(memberCountRow?.value ?? 0),
       unreadCount,
       lastMessage: lastMessageRow ? mapMessage(lastMessageRow) : null,
+      peerId,
+      peerName,
       createdAt: channel.createdAt.toISOString(),
       updatedAt: channel.updatedAt.toISOString(),
     })
@@ -346,5 +371,8 @@ export async function findOrCreateDirectChannel(
     type: "direct",
     memberIds: [peerId],
     createdBy: userId,
+  }).then(async (created) => {
+    const listed = await listMyChannels(userId)
+    return listed.items.find((item) => item.id === created.id) ?? created
   })
 }

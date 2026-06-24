@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { useEffect, useMemo, useState, useTransition } from "react"
 import { Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -130,12 +131,17 @@ export function AdminDepartmentsTable({ initial, employees }: AdminDepartmentsTa
             Иерархия, руководители и контактные данные для справочника компании.
           </p>
         </div>
-        <Button
-          className="bg-[#16223b] hover:bg-[#16223b]/90"
-          onClick={handleOpenCreate}
-        >
-          Создать подразделение
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/structure-import">
+            <Button variant="outline">Импорт из 1С</Button>
+          </Link>
+          <Button
+            className="bg-[#16223b] hover:bg-[#16223b]/90"
+            onClick={handleOpenCreate}
+          >
+            Создать подразделение
+          </Button>
+        </div>
       </Card>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

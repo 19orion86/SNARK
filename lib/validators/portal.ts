@@ -5,7 +5,7 @@ export const employeesQuerySchema = z.object({
   search: z.string().trim().optional(),
   department: z.string().trim().optional(),
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(1000).default(20),
 })
 
 export const employeeSchema = z.object({
@@ -94,6 +94,7 @@ export const departmentTreeNodeSchema: z.ZodType<DepartmentTreeNode> = z.lazy(()
     description: z.string().nullable(),
     head: departmentTreeHeadSchema.nullable(),
     employeeCount: z.number().int().nonnegative(),
+    plannedHeadcount: z.number().int().nonnegative().nullable(),
     children: z.array(departmentTreeNodeSchema),
   })
 )
@@ -523,6 +524,55 @@ export const employeeImportResponseSchema = z.object({
   created: z.number().int().min(0),
   updated: z.number().int().min(0),
   errors: z.array(employeeImportErrorSchema),
+})
+
+export const orgStructurePreviewTreeNodeSchema: z.ZodType<{
+  name: string
+  plannedHeadcount: number
+  children: Array<{ name: string; plannedHeadcount: number; children: unknown[] }>
+}> = z.lazy(() =>
+  z.object({
+    name: z.string(),
+    plannedHeadcount: z.number().int().nonnegative(),
+    children: z.array(orgStructurePreviewTreeNodeSchema),
+  })
+)
+
+export const orgStructureDepartmentDiffItemSchema = z.object({
+  name: z.string(),
+  externalKey: z.string(),
+  parentName: z.string().nullable(),
+  plannedHeadcount: z.number().int().nonnegative(),
+  action: z.enum(["create", "update", "unchanged"]),
+})
+
+export const orgStructureEmployeeDiffItemSchema = z.object({
+  fullName: z.string(),
+  departmentName: z.string(),
+  positionTitle: z.string(),
+  hireDate: z.string().optional(),
+  action: z.enum(["create", "update", "unchanged"]),
+})
+
+export const orgStructureImportPreviewSchema = z.object({
+  stats: z.object({
+    departments: z.number().int().nonnegative(),
+    positions: z.number().int().nonnegative(),
+    employees: z.number().int().nonnegative(),
+  }),
+  warnings: z.array(z.string()),
+  tree: z.array(orgStructurePreviewTreeNodeSchema),
+  departmentDiff: z.array(orgStructureDepartmentDiffItemSchema),
+  employeeDiff: z.array(orgStructureEmployeeDiffItemSchema),
+})
+
+export const orgStructureImportResultSchema = z.object({
+  departmentsCreated: z.number().int().min(0),
+  departmentsUpdated: z.number().int().min(0),
+  employeesCreated: z.number().int().min(0),
+  employeesUpdated: z.number().int().min(0),
+  employeesNotFound: z.number().int().min(0),
+  warnings: z.array(z.string()),
 })
 
 export const newsCategorySchema = z.enum(["company", "projects", "people", "important"])
@@ -957,6 +1007,8 @@ export const chatChannelSchema = z.object({
   memberCount: z.number().int().min(0),
   unreadCount: z.number().int().min(0),
   lastMessage: chatMessageSchema.nullable(),
+  peerId: z.string().uuid().nullable().optional(),
+  peerName: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

@@ -18,6 +18,9 @@ export const departments = pgTable("departments", {
   code: text("code"),
   contactEmail: text("contact_email"),
   description: text("description"),
+  externalKey: text("external_key"),
+  plannedHeadcount: integer("planned_headcount"),
+  isArchived: boolean("is_archived").notNull().default(false),
   headUserId: uuid("head_user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   parentId: uuid("parent_id").references((): AnyPgColumn => departments.id, { onDelete: "set null" }),
   regulationsDocId: uuid("regulations_doc_id").references((): AnyPgColumn => documents.id, {
@@ -26,6 +29,18 @@ export const departments = pgTable("departments", {
   standardsDocId: uuid("standards_doc_id").references((): AnyPgColumn => documents.id, {
     onDelete: "set null",
   }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const orgImportRuns = pgTable("org_import_runs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  fileName: text("file_name"),
+  syncMode: text("sync_mode").notNull().default("merge"),
+  applyDepartments: boolean("apply_departments").notNull().default(false),
+  applyEmployees: boolean("apply_employees").notNull().default(false),
+  stats: text("stats"),
+  warningsCount: integer("warnings_count").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 })
 

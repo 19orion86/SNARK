@@ -88,9 +88,12 @@ export default async function AdminPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             Иерархия подразделений, руководители и контакты для справочника компании.
           </p>
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-2">
             <Link href="/admin/departments">
               <Button className="bg-[#16223b] hover:bg-[#16223b]/90">Открыть раздел</Button>
+            </Link>
+            <Link href="/admin/structure-import">
+              <Button variant="outline">Импорт из 1С</Button>
             </Link>
           </div>
         </Card>

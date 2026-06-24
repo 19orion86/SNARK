@@ -360,6 +360,7 @@ export interface DepartmentTreeNode {
   description: string | null
   head: DepartmentTreeHead | null
   employeeCount: number
+  plannedHeadcount: number | null
   children: DepartmentTreeNode[]
 }
 
@@ -378,6 +379,9 @@ export interface AdminDepartmentItem {
   headName: string | null
   contactEmail: string | null
   employeeCount: number
+  plannedHeadcount: number | null
+  externalKey: string | null
+  isArchived: boolean
 }
 
 export interface AdminDepartmentsResponse {
@@ -486,6 +490,59 @@ export interface EmployeeImportResult {
   created: number
   updated: number
   errors: EmployeeImportErrorItem[]
+}
+
+export type OrgStructureSyncMode = "merge" | "replace" | "sync"
+
+export interface OrgStructurePreviewTreeNode {
+  name: string
+  plannedHeadcount: number
+  children: OrgStructurePreviewTreeNode[]
+}
+
+export type OrgStructureDepartmentAction = "create" | "update" | "unchanged"
+
+export interface OrgStructureDepartmentDiffItem {
+  name: string
+  externalKey: string
+  parentName: string | null
+  plannedHeadcount: number
+  action: OrgStructureDepartmentAction
+}
+
+export type OrgStructureEmployeeAction = "create" | "update" | "unchanged"
+
+export interface OrgStructureEmployeeDiffItem {
+  fullName: string
+  departmentName: string
+  positionTitle: string
+  hireDate?: string
+  action: OrgStructureEmployeeAction
+}
+
+export interface OrgStructureImportPreview {
+  stats: { departments: number; positions: number; employees: number }
+  warnings: string[]
+  tree: OrgStructurePreviewTreeNode[]
+  departmentDiff: OrgStructureDepartmentDiffItem[]
+  employeeDiff: OrgStructureEmployeeDiffItem[]
+}
+
+export interface OrgStructureImportOptions {
+  applyDepartments: boolean
+  applyEmployees: boolean
+  syncMode?: OrgStructureSyncMode
+  fileName?: string
+  userId?: string
+}
+
+export interface OrgStructureImportResult {
+  departmentsCreated: number
+  departmentsUpdated: number
+  employeesCreated: number
+  employeesUpdated: number
+  employeesNotFound: number
+  warnings: string[]
 }
 
 export type NewsCategory = "company" | "projects" | "people" | "important"
@@ -769,6 +826,8 @@ export interface ChatChannel {
   memberCount: number
   unreadCount: number
   lastMessage: ChatMessage | null
+  peerId?: string | null
+  peerName?: string | null
   createdAt: string
   updatedAt: string
 }

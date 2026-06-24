@@ -8,6 +8,7 @@ import {
   GraduationCap,
   Mail,
   MapPin,
+  MessageSquare,
   Phone,
   User,
 } from "lucide-react"
@@ -18,6 +19,7 @@ import {
   employeeStatusDotColor,
   employeeStatusLabel,
 } from "@/lib/portal-data/presence-ui"
+import { getServerSession } from "@/lib/auth/server-session"
 import { loadEmployeeById } from "@/lib/portal-data/loaders"
 
 export const dynamic = "force-dynamic"
@@ -45,6 +47,7 @@ function hasValue(value?: string | null): value is string {
 
 export default async function EmployeeDetailPage({ params }: Props) {
   const { id } = await params
+  const session = await getServerSession()
   const { item } = await loadEmployeeById(id)
 
   if (!item) {
@@ -115,12 +118,21 @@ export default async function EmployeeDetailPage({ params }: Props) {
                 Позвонить
               </a>
             ) : null}
+            {session?.userId && session.userId !== item.userId ? (
+              <Link
+                href={`/chat?peer=${item.userId}`}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#16223b] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#16223b]/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <MessageSquare className="h-4 w-4" aria-hidden="true" />
+                Написать в чат
+              </Link>
+            ) : null}
             <a
               href={`mailto:${item.email}`}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Mail className="h-4 w-4" aria-hidden="true" />
-              Написать
+              Email
             </a>
           </div>
         </Card>
