@@ -3,6 +3,7 @@ import {
   mockAddChannelMembers,
   mockCreateChannel,
   mockFindOrCreateDirectChannel,
+  mockListChannelMembers,
   mockListChannelsForUser,
   mockSendMessage,
 } from "@/lib/repositories/chat.mock-store"
@@ -32,5 +33,17 @@ describe("chat iteration 1", () => {
     const a = mockFindOrCreateDirectChannel(creator, peer)
     const b = mockFindOrCreateDirectChannel(peer, creator)
     expect(a.id).toBe(b.id)
+  })
+
+  it("lists channel members for a viewer who belongs to the channel", () => {
+    const channel = mockCreateChannel({
+      name: "Группа",
+      type: "group",
+      createdBy: creator,
+      memberIds: [peer],
+    })
+    const members = mockListChannelMembers(channel.id, creator)
+    expect(members?.map((item) => item.userId).sort()).toEqual([creator, peer].sort())
+    expect(mockListChannelMembers(channel.id, newbie)).toBeNull()
   })
 })

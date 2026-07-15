@@ -159,38 +159,52 @@ async function selectTaskRow(id: string): Promise<TaskRow | null> {
   return row ?? null
 }
 
-const mockTasks: PortalTask[] = [
-  {
-    id: "11111111-1111-1111-1111-111111111101",
-    title: "Подготовить отчёт по проекту",
-    description: "Собрать метрики за квартал",
-    status: "in_progress",
-    priority: "high",
-    assigneeId: null,
-    assigneeName: null,
-    creatorId: "00000000-0000-0000-0000-000000000001",
-    creatorName: "Администратор",
-    departmentId: null,
-    departmentName: null,
-    dueDate: "2026-06-20",
-    parentTaskId: null,
-    protocolActionItemId: null,
-    sourceMessageId: null,
-    sourceChannelId: null,
-    chatChannelId: null,
-    isImportant: false,
-    completionResult: null,
-    completedAt: null,
-    createdAt: "2026-06-01T10:00:00.000Z",
-    updatedAt: "2026-06-10T12:00:00.000Z",
-  },
-]
+const globalForMockTasks = globalThis as unknown as {
+  __snarkMockTasks?: PortalTask[]
+  __snarkMockChecklist?: TaskChecklistItem[]
+  __snarkMockComments?: TaskComment[]
+  __snarkMockAttachments?: TaskAttachment[]
+  __snarkMockActivity?: TaskActivityItem[]
+}
 
-const mockChecklist: TaskChecklistItem[] = []
-const mockComments: TaskComment[] = []
+const seedMockTask: PortalTask = {
+  id: "11111111-1111-1111-1111-111111111101",
+  title: "Подготовить отчёт по проекту",
+  description: "Собрать метрики за квартал",
+  status: "in_progress",
+  priority: "high",
+  assigneeId: null,
+  assigneeName: null,
+  creatorId: "00000000-0000-0000-0000-000000000001",
+  creatorName: "Администратор",
+  departmentId: null,
+  departmentName: null,
+  dueDate: "2026-06-20",
+  parentTaskId: null,
+  protocolActionItemId: null,
+  sourceMessageId: null,
+  sourceChannelId: null,
+  chatChannelId: null,
+  isImportant: false,
+  completionResult: null,
+  completedAt: null,
+  createdAt: "2026-06-01T10:00:00.000Z",
+  updatedAt: "2026-06-10T12:00:00.000Z",
+}
 
-const mockAttachments: TaskAttachment[] = []
-const mockActivity: TaskActivityItem[] = []
+if (!globalForMockTasks.__snarkMockTasks) {
+  globalForMockTasks.__snarkMockTasks = [seedMockTask]
+  globalForMockTasks.__snarkMockChecklist = []
+  globalForMockTasks.__snarkMockComments = []
+  globalForMockTasks.__snarkMockAttachments = []
+  globalForMockTasks.__snarkMockActivity = []
+}
+
+const mockTasks = globalForMockTasks.__snarkMockTasks!
+const mockChecklist = globalForMockTasks.__snarkMockChecklist!
+const mockComments = globalForMockTasks.__snarkMockComments!
+const mockAttachments = globalForMockTasks.__snarkMockAttachments!
+const mockActivity = globalForMockTasks.__snarkMockActivity!
 
 async function isTaskParticipant(taskId: string, userId: string): Promise<boolean> {
   if (isMockDb()) return false

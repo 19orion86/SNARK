@@ -1,6 +1,6 @@
 import { mockDisplayName } from "@/lib/auth/mock-users"
 import type { UserRole } from "@/types/auth"
-import type { ChatChannel, ChatMessage, ChatMessageType } from "@/types/portal"
+import type { ChatChannel, ChatChannelMember, ChatMessage, ChatMessageType } from "@/types/portal"
 
 interface MockChannelRecord {
   id: string
@@ -19,10 +19,24 @@ interface MockMembership {
   lastReadAt: string | null
 }
 
-const channels: MockChannelRecord[] = []
-const messages: ChatMessage[] = []
-const memberships: MockMembership[] = []
-const directChannelKeys = new Map<string, string>()
+const globalForMockChat = globalThis as unknown as {
+  __snarkMockChannels?: MockChannelRecord[]
+  __snarkMockMessages?: ChatMessage[]
+  __snarkMockMemberships?: MockMembership[]
+  __snarkMockDirectKeys?: Map<string, string>
+}
+
+if (!globalForMockChat.__snarkMockChannels) {
+  globalForMockChat.__snarkMockChannels = []
+  globalForMockChat.__snarkMockMessages = []
+  globalForMockChat.__snarkMockMemberships = []
+  globalForMockChat.__snarkMockDirectKeys = new Map()
+}
+
+const channels = globalForMockChat.__snarkMockChannels!
+const messages = globalForMockChat.__snarkMockMessages!
+const memberships = globalForMockChat.__snarkMockMemberships!
+const directChannelKeys = globalForMockChat.__snarkMockDirectKeys!
 
 const EDIT_DELETE_WINDOW_MS = 15 * 60 * 1000
 
@@ -342,4 +356,21 @@ export function mockUserCanAccessChannel(channelId: string, userId: string): boo
 
 export function getMockChannelMemberIds(channelId: string): string[] {
   return memberIds(channelId)
+}
+
+export function mockListChannelMembers(
+  channelId: string,
+  viewerId: string
+): ChatChannelMember[] | null {
+  if (!isMember(channelId, viewerId)) return null
+  return memberships
+    .filter((item) => item.channelId === channelId)
+    .map((item) => ({
+      userId: item.userId,
+      name: userName(item.userId),
+      position: null,
+      department: null,
+      joinedAt: null,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "ru"))
 }

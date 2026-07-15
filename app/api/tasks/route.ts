@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth, type AuthError } from "@/lib/auth/request-auth"
 import { writeAuditLog } from "@/lib/audit/log"
-import { listTasks, createTask } from "@/lib/repositories/tasks.repository"
+import { listTasks, createTask, getTaskDetail } from "@/lib/repositories/tasks.repository"
 import {
   apiErrorSchema,
   taskCreateSchema,
@@ -48,6 +48,16 @@ export async function POST(request: NextRequest) {
       )
     }
     const created = await createTask({ ...parsed.data, creatorId: auth.userId })
+    const detail =
+      (await getTaskDetail(created.id, auth.userId, auth.role)) ?? {
+        ...created,
+        checklist: [],
+        comments: [],
+        participants: [],
+        attachments: [],
+        subtasks: [],
+        activity: [],
+      }
     await writeAuditLog({
       userId: auth.userId,
       action: "user:tasks:create",
@@ -55,13 +65,15 @@ export async function POST(request: NextRequest) {
       resourceId: created.id,
       statusCode: 201,
     })
-    return NextResponse.json(taskDetailResponseSchema.parse({ item: created }), { status: 201 })
+    return NextResponse.json(taskDetailResponseSchema.parse({ item: detail }), { status: 201 })
   } catch (error) {
+    console.error("[POST /api/tasks]", error)
     const known = error as Partial<AuthError>
+    const message = error instanceof Error ? error.message : "Не удалось создать задачу"
     const status = known.status ?? 500
     return NextResponse.json(
       apiErrorSchema.parse({
-        error: status === 500 ? "Не удалось создать задачу" : (known.message ?? "Ошибка доступа"),
+        error: status === 500 ? message : (known.message ?? "Ошибка доступа"),
         code: status === 500 ? "INTERNAL_ERROR" : (known.code ?? "AUTH_ERROR"),
       }),
       { status }

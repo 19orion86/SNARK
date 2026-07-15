@@ -2,11 +2,12 @@ import "server-only"
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { db } from "@/lib/db/client"
-import { chatChannelMembers, chatChannels, chatMessages, employeeProfiles, users } from "@/lib/db/schema"
+import { chatChannelMembers, chatChannels, chatMessages, departments, employeeProfiles, users } from "@/lib/db/schema"
 import { formatFullName } from "@/lib/portal-data/format-name"
 import type {
   ChatChannel,
   ChatChannelCreatePayload,
+  ChatChannelMember,
   ChatChannelsListResponse,
   ChatMessage,
   ChatMessageType,
@@ -20,6 +21,7 @@ import {
   mockDeleteMessage,
   mockFindOrCreateDirectChannel,
   mockGetMessageById,
+  mockListChannelMembers,
   mockListChannelsForUser,
   mockListMessages,
   mockMarkChannelRead,
@@ -816,4 +818,51 @@ export async function removeChannelMembers(
   const ids = await listChannelMemberIds(channelId)
   getRealtimeBus().publish({ type: "channel.updated", channelId, memberIds: ids })
   return found
+}
+
+export async function listChannelMembers(
+  channelId: string,
+  viewerUserId: string
+): Promise<ChatChannelMember[]> {
+  if (isMockDb()) {
+    const items = mockListChannelMembers(channelId, viewerUserId)
+    if (!items) throw new Error("Нет доступа к каналу")
+    return items
+  }
+
+  const [membership] = await db
+    .select({ id: chatChannelMembers.id })
+    .from(chatChannelMembers)
+    .where(
+      and(eq(chatChannelMembers.channelId, channelId), eq(chatChannelMembers.userId, viewerUserId))
+    )
+    .limit(1)
+
+  if (!membership) throw new Error("Нет доступа к каналу")
+
+  const rows = await db
+    .select({
+      userId: chatChannelMembers.userId,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      middleName: employeeProfiles.middleName,
+      positionTitle: employeeProfiles.positionTitle,
+      departmentName: departments.name,
+      joinedAt: chatChannelMembers.joinedAt,
+    })
+    .from(chatChannelMembers)
+    .innerJoin(users, eq(users.id, chatChannelMembers.userId))
+    .leftJoin(employeeProfiles, eq(employeeProfiles.userId, users.id))
+    .leftJoin(departments, eq(departments.id, users.departmentId))
+    .where(eq(chatChannelMembers.channelId, channelId))
+
+  return rows
+    .map((row) => ({
+      userId: row.userId,
+      name: formatFullName(row.lastName, row.firstName, row.middleName),
+      position: row.positionTitle ?? null,
+      department: row.departmentName ?? null,
+      joinedAt: row.joinedAt ? new Date(row.joinedAt).toISOString() : null,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "ru"))
 }

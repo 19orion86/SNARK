@@ -148,12 +148,17 @@ export function TasksPageContent({
         return
       }
       const body = (await response.json()) as { item: PortalTask }
+      if (!body.item?.id) {
+        setError("Задача создана, но ответ сервера некорректный")
+        return
+      }
       if (createFile) {
         const formData = new FormData()
         formData.append("file", createFile)
         await fetch(`/api/tasks/${body.item.id}/attachments`, { method: "POST", body: formData })
       }
       router.push(`/tasks/${body.item.id}`)
+      router.refresh()
     } catch {
       setError("Сетевая ошибка")
     } finally {
@@ -257,6 +262,21 @@ export function TasksPageContent({
                 rows={3}
               />
             </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Приоритет</Label>
+              <Select value={priority} onValueChange={(v) => setPriority(v as TaskPriority)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TASK_PRIORITY_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {TASK_PRIORITY_LABEL[option]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="task-due">Крайний срок</Label>
               <div className="mb-2 flex flex-wrap gap-1">
@@ -291,21 +311,6 @@ export function TasksPageContent({
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
               />
-            </div>
-            <div className="space-y-2">
-              <Label>Приоритет</Label>
-              <Select value={priority} onValueChange={(v) => setPriority(v as TaskPriority)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {TASK_PRIORITY_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {TASK_PRIORITY_LABEL[option]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
             <div className="space-y-2">
               <Label>Исполнитель</Label>

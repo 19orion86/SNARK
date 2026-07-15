@@ -25,6 +25,7 @@ import { extractMentionUserIds } from "@/lib/mentions/parse"
 import { cn } from "@/lib/utils"
 import type {
   ChatChannel,
+  ChatChannelMember,
   ChatChannelsListResponse,
   ChatMessage,
   Employee,
@@ -89,7 +90,9 @@ export function ChatPageContent({
   const [createMemberPick, setCreateMemberPick] = useState<string | null>(null)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingBody, setEditingBody] = useState("")
-  const [removeMemberId, setRemoveMemberId] = useState<string | null>(null)
+  const [membersDialogOpen, setMembersDialogOpen] = useState(false)
+  const [channelMembers, setChannelMembers] = useState<ChatChannelMember[]>([])
+  const [loadingMembers, setLoadingMembers] = useState(false)
   const [mentionOpen, setMentionOpen] = useState(false)
   const [mentionQuery, setMentionQuery] = useState("")
 
@@ -287,6 +290,47 @@ export function ChatPageContent({
     startTransition(() => router.refresh())
   }
 
+  const enrichMember = useCallback(
+    (member: ChatChannelMember): ChatChannelMember => {
+      const employee = employees.find((item) => item.userId === member.userId)
+      if (!employee) return member
+      return {
+        ...member,
+        name: employee.name || member.name,
+        position: member.position ?? employee.position ?? null,
+        department: member.department ?? employee.department ?? null,
+      }
+    },
+    [employees]
+  )
+
+  const loadChannelMembers = useCallback(
+    async (channelId: string) => {
+      setLoadingMembers(true)
+      try {
+        const response = await fetch(`/api/chat/channels/${channelId}/members`)
+        if (!response.ok) {
+          const body = (await response.json().catch(() => ({}))) as { error?: string }
+          setError(body.error ?? "Не удалось загрузить участников")
+          setChannelMembers([])
+          return
+        }
+        const data = (await response.json()) as { items: ChatChannelMember[] }
+        setChannelMembers(data.items.map(enrichMember))
+        setError(null)
+      } finally {
+        setLoadingMembers(false)
+      }
+    },
+    [enrichMember]
+  )
+
+  const openMembersDialog = () => {
+    if (!activeChannelId) return
+    setMembersDialogOpen(true)
+    void loadChannelMembers(activeChannelId)
+  }
+
   const addMemberToGroup = async () => {
     if (!activeChannelId || !selectedMemberId) return
     setAddingMember(true)
@@ -305,27 +349,28 @@ export function ChatPageContent({
       setSelectedMemberId(null)
       setMemberPickerOpen(false)
       await refreshChannels()
+      if (membersDialogOpen) await loadChannelMembers(activeChannelId)
     } finally {
       setAddingMember(false)
     }
   }
 
-  const removeMemberFromGroup = async () => {
-    if (!activeChannelId || !removeMemberId) return
+  const removeMemberFromGroup = async (userId: string) => {
+    if (!activeChannelId || !userId) return
     setAddingMember(true)
     setError(null)
     try {
       const response = await fetch(`/api/chat/channels/${activeChannelId}/members`, {
         method: "DELETE",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ memberIds: [removeMemberId] }),
+        body: JSON.stringify({ memberIds: [userId] }),
       })
       const body = (await response.json().catch(() => ({}))) as { error?: string }
       if (!response.ok) {
         setError(body.error ?? "Не удалось удалить участника")
         return
       }
-      setRemoveMemberId(null)
+      setChannelMembers((prev) => prev.filter((item) => item.userId !== userId))
       await refreshChannels()
     } finally {
       setAddingMember(false)
@@ -443,6 +488,8 @@ export function ChatPageContent({
   }
 
   const activeChannel = channels.find((channel) => channel.id === activeChannelId) ?? null
+  const canManageMembers =
+    activeChannel?.type === "group" || activeChannel?.type === "department"
 
   const renderChannelButton = (channel: ChatChannel) => (
     <button
@@ -769,29 +816,34 @@ export function ChatPageContent({
                   ) : null}
                 </p>
               ) : activeChannel ? (
-                <p className="text-sm text-muted-foreground">Участников: {activeChannel.memberCount}</p>
+                <p className="text-sm text-muted-foreground">
+                  Участников: {activeChannel.memberCount}
+                </p>
               ) : null}
             </div>
-            {activeChannel &&
-            (activeChannel.type === "group" || activeChannel.type === "department") ? (
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setMemberPickerOpen(true)}
-                >
-                  <UserPlus className="mr-1 h-4 w-4" />
-                  Добавить
+            {activeChannel ? (
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={openMembersDialog}>
+                  <Users className="mr-1 h-4 w-4" />
+                  Участники
+                  <Badge variant="secondary" className="ml-1.5">
+                    {activeChannel.memberCount}
+                  </Badge>
                 </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setRemoveMemberId("__pick__")}
-                >
-                  Удалить участника
-                </Button>
+                {canManageMembers ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setMemberPickerOpen(true)
+                      if (activeChannelId) void loadChannelMembers(activeChannelId)
+                    }}
+                  >
+                    <UserPlus className="mr-1 h-4 w-4" />
+                    Добавить
+                  </Button>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -885,6 +937,80 @@ export function ChatPageContent({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={membersDialogOpen} onOpenChange={setMembersDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Участники
+              {activeChannel ? ` · ${channelTitle(activeChannel)}` : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+            {loadingMembers ? (
+              <p className="text-sm text-muted-foreground">Загрузка...</p>
+            ) : channelMembers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Участников нет</p>
+            ) : (
+              channelMembers.map((member) => {
+                const isSelf = member.userId === currentUserId
+                return (
+                  <div
+                    key={member.userId}
+                    className="flex items-start justify-between gap-3 rounded-lg border px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">
+                        {member.name}
+                        {isSelf ? (
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">(вы)</span>
+                        ) : null}
+                      </div>
+                      {(member.position || member.department) && (
+                        <div className="truncate text-xs text-muted-foreground">
+                          {[member.position, member.department].filter(Boolean).join(" · ")}
+                        </div>
+                      )}
+                    </div>
+                    {canManageMembers && !isSelf ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="shrink-0 text-destructive hover:text-destructive"
+                        disabled={addingMember}
+                        onClick={() => void removeMemberFromGroup(member.userId)}
+                      >
+                        Убрать
+                      </Button>
+                    ) : null}
+                  </div>
+                )
+              })
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            {canManageMembers ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setMembersDialogOpen(false)
+                  setMemberPickerOpen(true)
+                }}
+              >
+                <UserPlus className="mr-1 h-4 w-4" />
+                Добавить
+              </Button>
+            ) : (
+              <span />
+            )}
+            <Button type="button" onClick={() => setMembersDialogOpen(false)}>
+              Закрыть
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={memberPickerOpen} onOpenChange={setMemberPickerOpen}>
         <DialogContent>
           <DialogHeader>
@@ -892,7 +1018,9 @@ export function ChatPageContent({
           </DialogHeader>
           <div className="space-y-4">
             <EmployeePicker
-              employees={colleagues}
+              employees={colleagues.filter(
+                (employee) => !channelMembers.some((member) => member.userId === employee.userId)
+              )}
               value={selectedMemberId}
               onChange={setSelectedMemberId}
               placeholder="Выберите сотрудника"
@@ -908,38 +1036,6 @@ export function ChatPageContent({
               disabled={!selectedMemberId || addingMember}
             >
               Добавить
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={removeMemberId !== null}
-        onOpenChange={(open) => !open && setRemoveMemberId(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Удалить участника</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <EmployeePicker
-              employees={colleagues}
-              value={removeMemberId === "__pick__" ? null : removeMemberId}
-              onChange={setRemoveMemberId}
-              placeholder="Кого убрать из чата"
-            />
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setRemoveMemberId(null)}>
-              Отмена
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => void removeMemberFromGroup()}
-              disabled={!removeMemberId || removeMemberId === "__pick__" || addingMember}
-            >
-              Удалить
             </Button>
           </DialogFooter>
         </DialogContent>

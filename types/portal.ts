@@ -954,6 +954,19 @@ export interface ChatChannelsListResponse {
   items: ChatChannel[]
 }
 
+export interface ChatChannelMember {
+  userId: string
+  name: string
+  position: string | null
+  department: string | null
+  joinedAt: string | null
+}
+
+export interface ChatChannelMembersResponse {
+  items: ChatChannelMember[]
+  channelId: string
+}
+
 export interface ChatMessagesListResponse {
   items: ChatMessage[]
   channelId: string

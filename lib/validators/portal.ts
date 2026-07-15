@@ -1150,6 +1150,19 @@ export const chatChannelsListResponseSchema = z.object({
   items: z.array(chatChannelSchema),
 })
 
+export const chatChannelMemberSchema = z.object({
+  userId: z.string().uuid(),
+  name: z.string().min(1),
+  position: z.string().nullable(),
+  department: z.string().nullable(),
+  joinedAt: z.string().nullable(),
+})
+
+export const chatChannelMembersResponseSchema = z.object({
+  items: z.array(chatChannelMemberSchema),
+  channelId: z.string().uuid(),
+})
+
 export const chatMessagesListResponseSchema = z.object({
   items: z.array(chatMessageSchema),
   channelId: z.string().uuid(),
