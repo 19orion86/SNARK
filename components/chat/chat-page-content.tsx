@@ -115,7 +115,10 @@ export function ChatPageContent({
   const typingSendRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const activeChannelIdRef = useRef(activeChannelId)
-  activeChannelIdRef.current = activeChannelId
+
+  useEffect(() => {
+    activeChannelIdRef.current = activeChannelId
+  }, [activeChannelId])
 
   const colleagues = useMemo(
     () => employees.filter((employee) => employee.userId !== currentUserId),

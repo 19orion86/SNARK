@@ -40,7 +40,7 @@ class RedisRealtimeBus implements RealtimeBus {
   private started = false
 
   constructor(redisUrl: string) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // Dynamic require keeps ioredis out of edge/client bundles when REDIS_URL is unset.
     const Redis = require("ioredis") as typeof import("ioredis").default
     this.pub = new Redis(redisUrl, { maxRetriesPerRequest: 2, lazyConnect: true })
     this.sub = new Redis(redisUrl, { maxRetriesPerRequest: 2, lazyConnect: true })
