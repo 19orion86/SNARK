@@ -627,7 +627,7 @@ export interface TicketCategoryUpsertPayload {
   isActive?: boolean
   sortOrder?: number
 }
-export type TicketStatus = "new" | "in_progress" | "resolved" | "closed"
+export type TicketStatus = "new" | "in_progress" | "waiting_response" | "resolved" | "closed"
 export type TicketPriority = "low" | "medium" | "high" | "critical"
 
 export interface Ticket {
@@ -642,6 +642,8 @@ export interface Ticket {
   assigneeId: string | null
   assigneeName: string | null
   resolvedAt: string | null
+  firstRespondedAt?: string | null
+  slaBreached?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -772,6 +774,7 @@ export interface PortalTask {
   creatorName: string
   departmentId: string | null
   departmentName: string | null
+  projectId?: string | null
   dueDate: string | null
   parentTaskId?: string | null
   protocolActionItemId: number | null
@@ -863,8 +866,9 @@ export interface TasksQuery {
   assigneeId?: string
   creatorId?: string
   departmentId?: string
+  projectId?: string
   priority?: TaskPriority
-  scope?: "all" | "mine" | "created" | "watching" | "overdue" | "important"
+  scope?: "all" | "mine" | "created" | "watching" | "co_assignee" | "overdue" | "important"
   overdue?: boolean
   q?: string
   /** По умолчанию только корневые задачи (без parent). */
@@ -887,8 +891,10 @@ export interface TaskCreatePayload {
   priority?: TaskPriority
   assigneeId?: string | null
   departmentId?: string | null
+  projectId?: string | null
   dueDate?: string | null
   watcherIds?: string[]
+  coAssigneeIds?: string[]
   parentTaskId?: string | null
   protocolActionItemId?: number | null
   sourceMessageId?: string | null
@@ -902,6 +908,7 @@ export interface TaskUpdatePayload {
   priority?: TaskPriority
   assigneeId?: string | null
   departmentId?: string | null
+  projectId?: string | null
   dueDate?: string | null
   isImportant?: boolean
   completionResult?: string | null
@@ -916,9 +923,27 @@ export interface TaskParticipantPayload {
   role: TaskParticipantRole
 }
 
-export type ChatChannelType = "direct" | "group" | "department" | "task"
+export type ChatChannelType = "direct" | "group" | "department" | "task" | "channel"
 
-export type ChatMessageType = "user" | "system" | "task_created"
+export type ChatMessageType = "user" | "system" | "task_created" | "poll" | "voice"
+
+export interface ChatPollOptionSummary {
+  id: string
+  label: string
+  sortOrder: number
+  votesCount: number
+  votedByMe: boolean
+}
+
+export interface ChatPollSummary {
+  id: string
+  question: string
+  allowMultiple: boolean
+  closesAt: string | null
+  totalVotes: number
+  options: ChatPollOptionSummary[]
+  myOptionIds: string[]
+}
 
 export interface ChatChannel {
   id: string
@@ -946,6 +971,8 @@ export interface ChatMessage {
   replyToId: string | null
   replyToBody?: string | null
   linkedTaskId?: string | null
+  metadata?: Record<string, unknown> | null
+  poll?: ChatPollSummary | null
   createdAt: string
   editedAt: string | null
 }

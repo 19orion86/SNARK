@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAuth, type AuthError } from "@/lib/auth/request-auth"
 import { writeAuditLog } from "@/lib/audit/log"
 import { getPortalRepositoryServer } from "@/lib/repositories/portal-repository.server"
+import { createApprovalChain } from "@/lib/repositories/vacation-approvals.repository"
 import { countWorkingDays } from "@/lib/utils/working-days"
 import {
   apiErrorSchema,
@@ -59,6 +60,12 @@ export async function POST(request: NextRequest) {
       userId: auth.userId,
       daysTotal,
     })
+
+    try {
+      await createApprovalChain(created.id, auth.userId)
+    } catch (error) {
+      console.error("[POST /api/vacations] approval chain", error)
+    }
 
     await writeAuditLog({
       userId: auth.userId,

@@ -1,9 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { CheckSquare, ClipboardList, MessageSquare, Pencil, Trash2, UserPlus, Users } from "lucide-react"
+import { CheckSquare, ClipboardList, FolderPlus, MessageSquare, Mic, Paperclip, Pencil, Pin, Trash2, UserPlus, Users } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { EmployeePicker } from "@/components/shared/employee-picker"
 import { Button } from "@/components/ui/button"
@@ -30,6 +30,7 @@ import type {
   ChatMessage,
   Employee,
   PortalTask,
+  ChatPollSummary,
 } from "@/types/portal"
 import type { UserRole } from "@/types/auth"
 
@@ -95,6 +96,26 @@ export function ChatPageContent({
   const [loadingMembers, setLoadingMembers] = useState(false)
   const [mentionOpen, setMentionOpen] = useState(false)
   const [mentionQuery, setMentionQuery] = useState("")
+  const [typingLabel, setTypingLabel] = useState<string | null>(null)
+  const [myReactions, setMyReactions] = useState<Record<string, boolean>>({})
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const [chatSearch, setChatSearch] = useState("")
+  const [searchHits, setSearchHits] = useState<Array<{ messageId: string; channelId: string; body: string; authorName: string }>>([])
+  const [folders, setFolders] = useState<Array<{ id: string; name: string; channelIds: string[] }>>([])
+  const [activeFolderId, setActiveFolderId] = useState<string | null>(null)
+  const [newFolderName, setNewFolderName] = useState("")
+  const [pollDialogOpen, setPollDialogOpen] = useState(false)
+  const [pollQuestion, setPollQuestion] = useState("")
+  const [pollOptions, setPollOptions] = useState(["", ""])
+  const [creatingPoll, setCreatingPoll] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordedChunksRef = useRef<Blob[]>([])
+  const typingClearRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const typingSendRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const activeChannelIdRef = useRef(activeChannelId)
+  activeChannelIdRef.current = activeChannelId
 
   const colleagues = useMemo(
     () => employees.filter((employee) => employee.userId !== currentUserId),
@@ -114,17 +135,25 @@ export function ChatPageContent({
       .slice(0, 12)
   }, [colleagues, employeeSearch])
 
+  const folderFilteredChannels = useMemo(() => {
+    if (!activeFolderId) return channels
+    const folder = folders.find((item) => item.id === activeFolderId)
+    if (!folder) return channels
+    const ids = new Set(folder.channelIds)
+    return channels.filter((channel) => ids.has(channel.id))
+  }, [channels, folders, activeFolderId])
+
   const directChannels = useMemo(
-    () => channels.filter((channel) => channel.type === "direct"),
-    [channels]
+    () => folderFilteredChannels.filter((channel) => channel.type === "direct"),
+    [folderFilteredChannels]
   )
   const taskChannels = useMemo(
-    () => channels.filter((channel) => channel.type === "task"),
-    [channels]
+    () => folderFilteredChannels.filter((channel) => channel.type === "task"),
+    [folderFilteredChannels]
   )
   const groupChannels = useMemo(
-    () => channels.filter((channel) => channel.type === "group" || channel.type === "department"),
-    [channels]
+    () => folderFilteredChannels.filter((channel) => channel.type === "group" || channel.type === "department"),
+    [folderFilteredChannels]
   )
 
   const loadMessages = useCallback(async (channelId: string, silent = false) => {
@@ -149,9 +178,181 @@ export function ChatPageContent({
     } else {
       setMessages([])
     }
+    setTypingLabel(null)
+    setMyReactions({})
   }, [activeChannelId, loadMessages])
 
-  const refreshChannels = useCallback(async () => {
+  useEffect(() => {
+    return () => {
+      if (typingClearRef.current) clearTimeout(typingClearRef.current)
+      if (typingSendRef.current) clearTimeout(typingSendRef.current)
+    }
+  }, [])
+
+  const loadFolders = useCallback(async () => {
+    try {
+      const response = await fetch("/api/chat/folders")
+      if (!response.ok) return
+      const data = (await response.json()) as { items: Array<{ id: string; name: string; channelIds: string[] }> }
+      setFolders(data.items ?? [])
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadFolders()
+  }, [loadFolders])
+
+  useEffect(() => {
+    const q = chatSearch.trim()
+    if (q.length < 2) {
+      setSearchHits([])
+      return
+    }
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const response = await fetch(`/api/chat/search?q=${encodeURIComponent(q)}`)
+          if (!response.ok) return
+          const data = (await response.json()) as {
+            items: Array<{ messageId: string; channelId: string; body: string; authorName: string }>
+          }
+          setSearchHits(data.items ?? [])
+        } catch {
+          // ignore
+        }
+      })()
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [chatSearch])
+
+  const createFolder = async () => {
+    if (!newFolderName.trim()) return
+    const response = await fetch("/api/chat/folders", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: newFolderName.trim() }),
+    })
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string }
+      setError(body.error ?? "Не удалось создать папку")
+      return
+    }
+    setNewFolderName("")
+    await loadFolders()
+  }
+
+  const createPoll = async () => {
+    if (!activeChannelId || !pollQuestion.trim()) return
+    const options = pollOptions.map((o) => o.trim()).filter(Boolean)
+    if (options.length < 2 || options.length > 6) {
+      setError("Укажите от 2 до 6 вариантов ответа")
+      return
+    }
+    setCreatingPoll(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/chat/channels/${activeChannelId}/polls`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ question: pollQuestion.trim(), options }),
+      })
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string }
+        setError(body.error ?? "Не удалось создать опрос")
+        return
+      }
+      setPollDialogOpen(false)
+      setPollQuestion("")
+      setPollOptions(["", ""])
+      await loadMessages(activeChannelId, true)
+    } finally {
+      setCreatingPoll(false)
+    }
+  }
+
+  const votePoll = async (pollId: string, optionId: string) => {
+    const response = await fetch(`/api/chat/polls/${pollId}/vote`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ optionId }),
+    })
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string }
+      setError(body.error ?? "Не удалось проголосовать")
+      return
+    }
+    const data = (await response.json()) as { item?: ChatPollSummary }
+    if (data.item && activeChannelId) {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.poll?.id === pollId || (msg.metadata && (msg.metadata as { pollId?: string }).pollId === pollId)
+            ? { ...msg, poll: data.item }
+            : msg
+        )
+      )
+      await loadMessages(activeChannelId, true)
+    }
+  }
+
+  const pinMessage = async (messageId: string) => {
+    if (!activeChannelId) return
+    const response = await fetch(`/api/chat/channels/${activeChannelId}/pins`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messageId }),
+    })
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string }
+      setError(body.error ?? "Не удалось закрепить")
+      return
+    }
+  }
+
+  const toggleVoiceRecording = async () => {
+    if (!activeChannelId) return
+    if (recording && mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop()
+      setRecording(false)
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+      recordedChunksRef.current = []
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordedChunksRef.current.push(event.data)
+      }
+      recorder.onstop = () => {
+        void (async () => {
+          const blob = new Blob(recordedChunksRef.current, { type: "audio/webm" })
+          stream.getTracks().forEach((t) => t.stop())
+          if (!blob.size || !activeChannelId) return
+          const formData = new FormData()
+          formData.append("audio", blob, "voice.webm")
+          const response = await fetch(`/api/chat/channels/${activeChannelId}/voice`, {
+            method: "POST",
+            body: formData,
+          })
+          if (!response.ok) {
+            const body = (await response.json().catch(() => ({}))) as { error?: string }
+            setError(body.error ?? "Не удалось отправить голосовое")
+            return
+          }
+          await loadMessages(activeChannelId, true)
+          await refreshChannels()
+        })()
+      }
+      mediaRecorderRef.current = recorder
+      recorder.start()
+      setRecording(true)
+    } catch {
+      setError("Нет доступа к микрофону")
+    }
+  }
+
+    const refreshChannels = useCallback(async () => {
     const response = await fetch("/api/chat/channels")
     if (!response.ok) return
     const data = (await response.json()) as ChatChannelsListResponse
@@ -166,7 +367,23 @@ export function ChatPageContent({
         void refreshChannels()
         return
       }
-      if (!("channelId" in event) || event.channelId !== activeChannelId) {
+      if (event.type === "read.updated") {
+        // Read receipts: optional — refresh unread badges when others read.
+        if (event.userId !== currentUserId) void refreshChannels()
+        return
+      }
+      if (event.type === "typing.start") {
+        if (event.channelId !== activeChannelIdRef.current || event.userId === currentUserId) return
+        const name =
+          event.userName ??
+          employees.find((employee) => employee.userId === event.userId)?.name ??
+          null
+        setTypingLabel(name ? `${name} печатает…` : "печатает…")
+        if (typingClearRef.current) clearTimeout(typingClearRef.current)
+        typingClearRef.current = setTimeout(() => setTypingLabel(null), 2500)
+        return
+      }
+      if (!("channelId" in event) || event.channelId !== activeChannelIdRef.current) {
         if (event.type === "message.new") void refreshChannels()
         return
       }
@@ -204,11 +421,63 @@ export function ChatPageContent({
       if (!after.includes(" ") || after.split(" ").length <= 2) {
         setMentionOpen(true)
         setMentionQuery(after)
+      } else {
+        setMentionOpen(false)
+        setMentionQuery("")
+      }
+    } else {
+      setMentionOpen(false)
+      setMentionQuery("")
+    }
+
+    if (!activeChannelId || !value.trim()) return
+    if (typingSendRef.current) clearTimeout(typingSendRef.current)
+    typingSendRef.current = setTimeout(() => {
+      void fetch(`/api/chat/channels/${activeChannelId}/typing`, { method: "POST" })
+    }, 600)
+  }
+
+  const toggleThumbsUp = async (messageId: string) => {
+    if (!activeChannelId) return
+    const response = await fetch(
+      `/api/chat/channels/${activeChannelId}/messages/${messageId}/reactions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ emoji: "👍" }),
+      }
+    )
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string }
+      setError(body.error ?? "Не удалось поставить реакцию")
+      return
+    }
+    const data = (await response.json()) as { item?: { added: boolean } }
+    setMyReactions((prev) => ({ ...prev, [messageId]: Boolean(data.item?.added) }))
+  }
+
+  const uploadAttachment = async (file: File) => {
+    if (!activeChannelId || !file.size) return
+    setUploadingFile(true)
+    setError(null)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const response = await fetch(`/api/chat/channels/${activeChannelId}/attachments`, {
+        method: "POST",
+        body: formData,
+      })
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string }
+        setError(body.error ?? "Не удалось загрузить файл")
         return
       }
+      await loadMessages(activeChannelId, true)
+      await refreshChannels()
+    } finally {
+      setUploadingFile(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
     }
-    setMentionOpen(false)
-    setMentionQuery("")
   }
 
   const insertMention = (name: string) => {
@@ -534,6 +803,18 @@ export function ChatPageContent({
       )
     }
 
+
+    const poll =
+      message.poll ??
+      null
+    const isPoll = message.messageType === "poll" || Boolean(message.metadata?.pollId) || Boolean(poll)
+    const voiceUrl =
+      message.messageType === "voice"
+        ? typeof message.metadata?.fileUrl === "string"
+          ? message.metadata.fileUrl
+          : null
+        : null
+
     const isMine = message.authorId === currentUserId
     const canManage = canEditOrDeleteMessage(message)
     const isEditing = editingMessageId === message.id
@@ -594,15 +875,64 @@ export function ChatPageContent({
             </div>
           </div>
         ) : (
-          <MessageBodyWithMentions
-            body={message.body}
-            employees={colleagues.map((employee) => ({
-              userId: employee.userId,
-              name: employee.name,
-            }))}
-          />
+          <>
+            <MessageBodyWithMentions
+              body={message.body}
+              employees={colleagues.map((employee) => ({
+                userId: employee.userId,
+                name: employee.name,
+              }))}
+            />
+            {voiceUrl ? (
+              <audio controls className="mt-2 w-full max-w-xs" src={voiceUrl}>
+                Голосовое сообщение
+              </audio>
+            ) : null}
+            {isPoll && poll ? (
+              <div className="mt-2 space-y-2 rounded-md border border-border/60 bg-background/40 p-2 text-foreground">
+                <p className="text-sm font-medium">{poll.question}</p>
+                {poll.options.map((option) => (
+                  <Button
+                    key={option.id}
+                    type="button"
+                    size="sm"
+                    variant={option.votedByMe ? "default" : "outline"}
+                    className="h-auto w-full justify-between whitespace-normal text-left"
+                    onClick={() => void votePoll(poll.id, option.id)}
+                  >
+                    <span>{option.label}</span>
+                    <span className="ml-2 text-xs opacity-70">{option.votesCount}</span>
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+          </>
         )}
+        {myReactions[message.id] ? (
+          <div className="mt-1 text-sm" aria-label="Реакция">
+            👍
+          </div>
+        ) : null}
         <div className="mt-2 flex flex-wrap gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+          <Button
+            type="button"
+            size="sm"
+            variant={isMine ? "secondary" : "outline"}
+            className="h-7 text-xs"
+            onClick={() => void toggleThumbsUp(message.id)}
+          >
+            👍
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={isMine ? "secondary" : "outline"}
+            className="h-7 text-xs"
+            onClick={() => void pinMessage(message.id)}
+          >
+            <Pin className="mr-1 h-3 w-3" />
+            Закрепить
+          </Button>
           {!isMine ? (
             <>
               <Button
@@ -665,6 +995,73 @@ export function ChatPageContent({
       <Card className="flex flex-col p-4">
         <h1 className="text-xl font-semibold">Чат</h1>
         <p className="mt-1 text-sm text-muted-foreground">Личные, групповые и чаты задач</p>
+
+
+        <div className="mt-4 space-y-2">
+          <label className="text-xs font-medium text-muted-foreground" htmlFor="chat-search">
+            Поиск по сообщениям
+          </label>
+          <Input
+            id="chat-search"
+            value={chatSearch}
+            onChange={(event) => setChatSearch(event.target.value)}
+            placeholder="Найти сообщение..."
+          />
+          {searchHits.length > 0 ? (
+            <div className="max-h-32 space-y-1 overflow-y-auto rounded-md border p-1">
+              {searchHits.map((hit) => (
+                <button
+                  key={hit.messageId}
+                  type="button"
+                  className="w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"
+                  onClick={() => {
+                    setActiveChannelId(hit.channelId)
+                    setChatSearch("")
+                    setSearchHits([])
+                  }}
+                >
+                  <span className="font-medium">{hit.authorName}</span>
+                  <span className="mt-0.5 line-clamp-2 block text-muted-foreground">{hit.body}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Папки</p>
+          <div className="flex flex-wrap gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant={activeFolderId == null ? "default" : "outline"}
+              onClick={() => setActiveFolderId(null)}
+            >
+              Все
+            </Button>
+            {folders.map((folder) => (
+              <Button
+                key={folder.id}
+                type="button"
+                size="sm"
+                variant={activeFolderId === folder.id ? "default" : "outline"}
+                onClick={() => setActiveFolderId(folder.id)}
+              >
+                {folder.name}
+              </Button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              value={newFolderName}
+              onChange={(event) => setNewFolderName(event.target.value)}
+              placeholder="Новая папка"
+            />
+            <Button type="button" variant="outline" size="icon" onClick={() => void createFolder()}>
+              <FolderPlus className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
 
         <div className="mt-4 space-y-2">
           <label className="text-xs font-medium text-muted-foreground" htmlFor="employee-search">
@@ -872,7 +1269,50 @@ export function ChatPageContent({
           </div>
         ) : null}
 
+        {typingLabel ? (
+          <p className="mt-2 text-xs text-muted-foreground">{typingLabel}</p>
+        ) : null}
+
         <form onSubmit={sendMessage} className="relative mt-4 flex gap-2 border-t pt-4">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (file) void uploadAttachment(file)
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            disabled={!activeChannelId || uploadingFile}
+            onClick={() => fileInputRef.current?.click()}
+            title="Прикрепить файл"
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant={recording ? "destructive" : "outline"}
+            size="icon"
+            disabled={!activeChannelId}
+            onClick={() => void toggleVoiceRecording()}
+            title="Голосовое"
+          >
+            <Mic className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            disabled={!activeChannelId}
+            onClick={() => setPollDialogOpen(true)}
+            title="Опрос"
+          >
+            <ClipboardList className="h-4 w-4" />
+          </Button>
           <div className="relative min-w-0 flex-1">
             {mentionOpen && mentionCandidates.length > 0 ? (
               <div className="absolute bottom-full left-0 z-20 mb-1 max-h-40 w-full overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
@@ -1006,6 +1446,59 @@ export function ChatPageContent({
             )}
             <Button type="button" onClick={() => setMembersDialogOpen(false)}>
               Закрыть
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pollDialogOpen} onOpenChange={setPollDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Создать опрос</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Вопрос</Label>
+              <Input value={pollQuestion} onChange={(e) => setPollQuestion(e.target.value)} />
+            </div>
+            {pollOptions.map((option, index) => (
+              <div key={index} className="space-y-2">
+                <Label>Вариант {index + 1}</Label>
+                <Input
+                  value={option}
+                  onChange={(e) =>
+                    setPollOptions((prev) => prev.map((item, i) => (i === index ? e.target.value : item)))
+                  }
+                />
+              </div>
+            ))}
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={pollOptions.length >= 6}
+                onClick={() => setPollOptions((prev) => [...prev, ""])}
+              >
+                + вариант
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={pollOptions.length <= 2}
+                onClick={() => setPollOptions((prev) => prev.slice(0, -1))}
+              >
+                − вариант
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPollDialogOpen(false)}>
+              Отмена
+            </Button>
+            <Button type="button" disabled={creatingPoll} onClick={() => void createPoll()}>
+              Создать
             </Button>
           </DialogFooter>
         </DialogContent>

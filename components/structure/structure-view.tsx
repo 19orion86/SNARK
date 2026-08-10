@@ -11,15 +11,17 @@ import {
   Network,
   Search,
   Users,
+  LayoutGrid,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { OrgDiagram } from "@/components/structure/org-diagram"
 import type { DepartmentTreeNode } from "@/types/portal"
 
-type ViewMode = "tree" | "list"
+type ViewMode = "tree" | "list" | "diagram"
 
 interface FlatDepartmentNode {
   node: DepartmentTreeNode
@@ -325,6 +327,14 @@ export function StructureView({ nodes }: StructureViewProps) {
             <Network className="mr-2 h-4 w-4" />
             Дерево
           </Button>
+          <Button
+            type="button"
+            variant={viewMode === "diagram" ? "default" : "outline"}
+            onClick={() => setViewMode("diagram")}
+          >
+            <LayoutGrid className="mr-2 h-4 w-4" />
+            Схема
+          </Button>
           <Button type="button" variant={viewMode === "list" ? "default" : "outline"} onClick={() => setViewMode("list")}>
             <List className="mr-2 h-4 w-4" />
             Список
@@ -362,6 +372,9 @@ export function StructureView({ nodes }: StructureViewProps) {
         </nav>
       ) : null}
 
+      {viewMode === "diagram" ? (
+        <OrgDiagram nodes={filteredNodes} />
+      ) : (
       <div className="grid gap-4 lg:grid-cols-[minmax(320px,400px)_1fr]">
         <div className="rounded-lg border border-border bg-card p-3 lg:max-h-[70vh] lg:min-w-0 lg:overflow-auto">
           {viewMode === "tree" ? (
@@ -410,6 +423,7 @@ export function StructureView({ nodes }: StructureViewProps) {
           )}
         </div>
       </div>
+      )}
     </div>
   )
 }

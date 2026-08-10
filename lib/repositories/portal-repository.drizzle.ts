@@ -1625,10 +1625,11 @@ export const drizzlePortalRepository: PortalRepository = {
   ): Promise<{ item: Ticket | null }> {
     const row = await selectTicketRow(id)
     if (!row) return { item: null }
-    if (requester.role !== "admin" && row.authorId !== requester.userId) {
+    if (requester.role !== "admin" && requester.role !== "hr_manager" && row.authorId !== requester.userId) {
       return { item: null }
     }
-    return { item: mapTicketRow(row) }
+    const { applySlaToTicket } = await import("@/lib/repositories/ticket-sla.repository")
+    return { item: await applySlaToTicket(mapTicketRow(row)) }
   },
 
   async createTicket(payload: TicketCreatePayload & { authorId: string }): Promise<Ticket> {
@@ -2808,6 +2809,8 @@ type TicketRow = {
   priority: string
   assigneeId: string | null
   resolvedAt: Date | null
+  firstRespondedAt: Date | null
+  slaBreached: boolean
   createdAt: Date
   updatedAt: Date
   authorFirstName: string | null
@@ -2841,7 +2844,14 @@ function mapTicketCategoryRow(row: typeof ticketCategories.$inferSelect): Ticket
 }
 
 function normalizeStatus(value: string): TicketStatus {
-  if (value === "in_progress" || value === "resolved" || value === "closed") return value
+  if (
+    value === "in_progress" ||
+    value === "waiting_response" ||
+    value === "resolved" ||
+    value === "closed"
+  ) {
+    return value
+  }
   return "new"
 }
 
@@ -2867,6 +2877,8 @@ function mapTicketRow(row: TicketRow): Ticket {
     assigneeId: row.assigneeId ?? null,
     assigneeName,
     resolvedAt: row.resolvedAt ? row.resolvedAt.toISOString() : null,
+    firstRespondedAt: row.firstRespondedAt ? row.firstRespondedAt.toISOString() : null,
+    slaBreached: Boolean(row.slaBreached),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }
@@ -2884,6 +2896,8 @@ async function selectTicketRow(id: string): Promise<TicketRow | null> {
       priority: tickets.priority,
       assigneeId: tickets.assigneeId,
       resolvedAt: tickets.resolvedAt,
+      firstRespondedAt: tickets.firstRespondedAt,
+      slaBreached: tickets.slaBreached,
       createdAt: tickets.createdAt,
       updatedAt: tickets.updatedAt,
       authorFirstName: ticketAuthor.firstName,
@@ -2928,6 +2942,8 @@ async function listTicketsInternal(params: {
       priority: tickets.priority,
       assigneeId: tickets.assigneeId,
       resolvedAt: tickets.resolvedAt,
+      firstRespondedAt: tickets.firstRespondedAt,
+      slaBreached: tickets.slaBreached,
       createdAt: tickets.createdAt,
       updatedAt: tickets.updatedAt,
       authorFirstName: ticketAuthor.firstName,
@@ -2943,8 +2959,11 @@ async function listTicketsInternal(params: {
     .limit(limit)
     .offset(offset)
 
+  const { applySlaToTicket } = await import("@/lib/repositories/ticket-sla.repository")
+  const items = await Promise.all(rows.map((row) => applySlaToTicket(mapTicketRow(row))))
+
   return {
-    items: rows.map((row) => mapTicketRow(row)),
+    items,
     total: Number(totalRow?.value ?? 0),
     page,
     limit,

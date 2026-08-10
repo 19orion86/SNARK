@@ -42,6 +42,11 @@ export function makeDirectKey(userA: string, userB: string): string {
   return [userA, userB].sort().join(":")
 }
 
+function asMetadata(metadata: unknown): Record<string, unknown> | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null
+  return metadata as Record<string, unknown>
+}
+
 function mapMessage(row: {
   id: string
   channelId: string
@@ -53,9 +58,12 @@ function mapMessage(row: {
   replyToId?: string | null
   replyToBody?: string | null
   linkedTaskId?: string | null
+  metadata?: unknown
+  poll?: ChatMessage["poll"]
   createdAt: Date
   editedAt: Date | null
 }): ChatMessage {
+  const metadata = asMetadata(row.metadata)
   return {
     id: row.id,
     channelId: row.channelId,
@@ -65,7 +73,9 @@ function mapMessage(row: {
     messageType: (row.messageType ?? "user") as ChatMessageType,
     replyToId: row.replyToId ?? null,
     replyToBody: row.replyToBody ?? null,
-    linkedTaskId: row.linkedTaskId ?? null,
+    linkedTaskId: row.linkedTaskId ?? parseLinkedTaskId(metadata),
+    metadata,
+    poll: row.poll ?? null,
     createdAt: row.createdAt.toISOString(),
     editedAt: row.editedAt ? row.editedAt.toISOString() : null,
   }
@@ -81,7 +91,7 @@ function canBypassEditWindow(role?: UserRole): boolean {
   return role === "admin" || role === "hr_manager"
 }
 
-async function listChannelMemberIds(channelId: string): Promise<string[]> {
+export async function listChannelMemberIds(channelId: string): Promise<string[]> {
   if (isMockDb()) {
     const { getMockChannelMemberIds } = await import("@/lib/repositories/chat.mock-store")
     return getMockChannelMemberIds(channelId)
@@ -255,7 +265,7 @@ export async function listMyChannels(userId: string): Promise<ChatChannelsListRe
             body: last.body,
             messageType: last.message_type,
             replyToId: last.reply_to_id,
-            linkedTaskId: parseLinkedTaskId(last.metadata),
+            metadata: last.metadata,
             createdAt: new Date(last.created_at),
             editedAt: last.edited_at ? new Date(last.edited_at) : null,
           })
@@ -270,6 +280,25 @@ export async function listMyChannels(userId: string): Promise<ChatChannelsListRe
   return { items }
 }
 
+function publishReadUpdated(channelId: string, userId: string, memberIds: string[]): void {
+  getRealtimeBus().publish({
+    type: "read.updated",
+    channelId,
+    userId,
+    lastReadAt: new Date().toISOString(),
+    memberIds,
+  })
+}
+
+/** Alias for callers that pass `{ limit }` (e.g. AI suggest). */
+export async function listMessages(
+  channelId: string,
+  userId: string,
+  options?: { limit?: number }
+): Promise<ChatMessagesListResponse> {
+  return listChannelMessages(channelId, userId, options?.limit ?? 50)
+}
+
 export async function listChannelMessages(
   channelId: string,
   userId: string,
@@ -277,6 +306,8 @@ export async function listChannelMessages(
 ): Promise<ChatMessagesListResponse> {
   if (isMockDb()) {
     mockMarkChannelRead(channelId, userId)
+    const memberIds = await listChannelMemberIds(channelId)
+    publishReadUpdated(channelId, userId, memberIds)
     return {
       channelId,
       items: mockListMessages(channelId, userId, limit),
@@ -284,7 +315,7 @@ export async function listChannelMessages(
   }
 
   const [membership] = await db
-    .select({ id: chatChannelMembers.id })
+    .select({ id: chatChannelMembers.id, lastReadAt: chatChannelMembers.lastReadAt })
     .from(chatChannelMembers)
     .where(and(eq(chatChannelMembers.channelId, channelId), eq(chatChannelMembers.userId, userId)))
     .limit(1)
@@ -315,30 +346,48 @@ export async function listChannelMessages(
     .orderBy(desc(chatMessages.createdAt))
     .limit(limit)
 
+  const now = new Date()
   await db
     .update(chatChannelMembers)
-    .set({ lastReadAt: new Date() })
+    .set({ lastReadAt: now })
     .where(and(eq(chatChannelMembers.channelId, channelId), eq(chatChannelMembers.userId, userId)))
+
+  // Avoid spamming SSE on every poll: publish only if read cursor actually advanced.
+  const prev = membership.lastReadAt
+  const shouldPublish =
+    !prev || now.getTime() - prev.getTime() > 5_000
+  if (shouldPublish) {
+    const memberIds = await listChannelMemberIds(channelId)
+    publishReadUpdated(channelId, userId, memberIds)
+  }
 
   return {
     channelId,
-    items: rows.reverse().map((row) =>
-      mapMessage({
-        id: row.id,
-        channelId: row.channelId,
-        authorId: row.authorId,
-        authorFirstName: row.authorFirstName,
-        authorLastName: row.authorLastName,
-        body: row.body,
-        messageType: row.messageType,
-        replyToId: row.replyToId,
-        replyToBody: row.replyToBody,
-        linkedTaskId: parseLinkedTaskId(row.metadata),
-        createdAt: row.createdAt,
-        editedAt: row.editedAt,
-      })
+    items: await attachPollsToMessages(
+      rows.reverse().map((row) => mapMessage(row)),
+      userId
     ),
   }
+}
+
+async function attachPollsToMessages(
+  messages: ChatMessage[],
+  userId: string
+): Promise<ChatMessage[]> {
+  const pollMessageIds = messages
+    .filter((m) => m.messageType === "poll")
+    .map((m) => m.id)
+  if (pollMessageIds.length === 0) return messages
+
+  const { getPollSummariesForMessages } = await import(
+    "@/lib/repositories/chat-polls.repository"
+  )
+  const pollsByMessageId = await getPollSummariesForMessages(pollMessageIds, userId)
+  return messages.map((message) => {
+    if (message.messageType !== "poll") return message
+    const poll = pollsByMessageId.get(message.id) ?? null
+    return { ...message, poll }
+  })
 }
 
 export async function createChannel(
@@ -405,12 +454,19 @@ export async function sendMessage(
     replyToId?: string | null
     messageType?: ChatMessageType
     mentionIds?: string[]
+    metadata?: Record<string, unknown> | null
   }
 ): Promise<ChatMessage> {
   assertMessageRateLimit(userId)
 
   if (isMockDb()) {
     const message = mockSendMessage(channelId, userId, body, options)
+    if (options?.metadata) {
+      message.metadata = options.metadata
+    }
+    if (options?.messageType) {
+      message.messageType = options.messageType
+    }
     const memberIds = await listChannelMemberIds(channelId)
     getRealtimeBus().publish({
       type: "message.new",
@@ -418,6 +474,7 @@ export async function sendMessage(
       message,
       memberIds,
     })
+    publishReadUpdated(channelId, userId, memberIds)
     await notifyMentions(channelId, userId, body, options?.mentionIds ?? [], memberIds)
     return message
   }
@@ -440,6 +497,7 @@ export async function sendMessage(
       body,
       messageType: options?.messageType ?? "user",
       replyToId: options?.replyToId ?? null,
+      metadata: options?.metadata ?? null,
     })
     .returning({ id: chatMessages.id })
 
@@ -470,10 +528,7 @@ export async function sendMessage(
     .limit(1)
 
   if (!row) throw new Error("Не удалось отправить сообщение")
-  const message = mapMessage({
-    ...row,
-    linkedTaskId: parseLinkedTaskId(row.metadata),
-  })
+  const message = mapMessage(row)
   const memberIds = await listChannelMemberIds(channelId)
   getRealtimeBus().publish({
     type: "message.new",
@@ -481,6 +536,7 @@ export async function sendMessage(
     message,
     memberIds,
   })
+  publishReadUpdated(channelId, userId, memberIds)
   await notifyMentions(channelId, userId, body, options?.mentionIds ?? [], memberIds)
   return message
 }
@@ -531,10 +587,12 @@ export async function getMessageById(messageId: string): Promise<ChatMessage | n
     .limit(1)
 
   if (!row) return null
-  return mapMessage({
-    ...row,
-    linkedTaskId: parseLinkedTaskId(row.metadata),
-  })
+  const message = mapMessage(row)
+  if (message.messageType === "poll") {
+    const [withPoll] = await attachPollsToMessages([message], row.authorId)
+    return withPoll
+  }
+  return message
 }
 
 export async function updateMessage(

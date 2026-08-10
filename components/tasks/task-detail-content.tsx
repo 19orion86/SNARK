@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useRef, useState, useTransition } from "react"
+import { useMemo, useRef, useState, useTransition } from "react"
 import { Flame, Paperclip, Trash2 } from "lucide-react"
 import { LiteMarkdownText } from "@/components/chat/message-body-with-mentions"
 import { EmployeePicker } from "@/components/shared/employee-picker"
@@ -75,14 +75,119 @@ export function TaskDetailContent({
   const [completeFile, setCompleteFile] = useState<File | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [selectedWatcherId, setSelectedWatcherId] = useState<string | null>(null)
+  const [selectedCoAssigneeId, setSelectedCoAssigneeId] = useState<string | null>(null)
+  const [checklistAssigneeId, setChecklistAssigneeId] = useState<string | null>(null)
   const [subtaskTitle, setSubtaskTitle] = useState("")
   const [creatingSubtask, setCreatingSubtask] = useState(false)
+  const [copilotPending, setCopilotPending] = useState(false)
+  const [taskLinks, setTaskLinks] = useState<
+    Array<{ id: string; entityType: string; entityId: string }>
+  >([])
 
   const watchers = task.participants.filter((p) => p.role === "watcher")
+  const coAssignees = task.participants.filter((p) => p.role === "co_assignee")
   const canDelete =
     task.creatorId === currentUserId || false // admin check on server
 
+  const participantEmployees = useMemo(() => {
+    const ids = new Set<string>()
+    if (task.creatorId) ids.add(task.creatorId)
+    if (task.assigneeId) ids.add(task.assigneeId)
+    for (const participant of task.participants) ids.add(participant.userId)
+
+    const fromProp = employees.filter((employee) => ids.has(employee.userId))
+    const found = new Set(fromProp.map((employee) => employee.userId))
+    const extras: Employee[] = []
+
+    const pushExtra = (userId: string, name: string) => {
+      if (found.has(userId)) return
+      found.add(userId)
+      extras.push({
+        id: 0,
+        userId,
+        name,
+        position: "",
+        department: "",
+        phone: "",
+        email: "",
+        office: "",
+        status: "offline",
+        avatar: "",
+        isContractor: false,
+        isNew: false,
+      })
+    }
+
+    if (task.creatorId) pushExtra(task.creatorId, task.creatorName)
+    if (task.assigneeId) pushExtra(task.assigneeId, task.assigneeName ?? task.assigneeId)
+    for (const participant of task.participants) {
+      pushExtra(participant.userId, participant.userName)
+    }
+
+    return [...fromProp, ...extras]
+  }, [employees, task.assigneeId, task.assigneeName, task.creatorId, task.creatorName, task.participants])
+
   const refresh = () => startTransition(() => router.refresh())
+
+  const loadLinks = async () => {
+    const response = await fetch(`/api/tasks/${task.id}/links`)
+    if (!response.ok) return
+    const body = (await response.json()) as {
+      items: Array<{ id: string; entityType: string; entityId: string }>
+    }
+    setTaskLinks(body.items)
+  }
+
+  const runCopilot = async (mode: "checklist" | "formulate" | "chat_summary") => {
+    setCopilotPending(true)
+    setError(null)
+    try {
+      const response = await fetch("/api/tasks/ai/suggest", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode,
+          taskId: task.id,
+          title: task.title,
+          description: task.description ?? "",
+        }),
+      })
+      if (!response.ok) {
+        setError("CoPilot временно недоступен")
+        return
+      }
+      const body = (await response.json()) as {
+        item: {
+          title?: string
+          description?: string
+          checklist?: string[]
+          summary?: string
+        }
+      }
+      if (mode === "checklist" && body.item.checklist?.length) {
+        for (const title of body.item.checklist) {
+          await fetch(`/api/tasks/${task.id}/checklist`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ title }),
+          })
+        }
+        refresh()
+      } else if (mode === "formulate") {
+        if (body.item.title) {
+          setTitle(body.item.title)
+          await patchTask({
+            title: body.item.title,
+            description: body.item.description ?? task.description,
+          })
+        }
+      } else if (mode === "chat_summary" && body.item.summary) {
+        setCommentBody(`Саммари чата (CoPilot):\n${body.item.summary}`)
+      }
+    } finally {
+      setCopilotPending(false)
+    }
+  }
 
   const applyTask = (next: TaskDetail) => {
     setTask(next)
@@ -133,6 +238,29 @@ export function TaskDetailContent({
   const removeWatcher = async (userId: string) => {
     const response = await fetch(
       `/api/tasks/${task.id}/participants?userId=${userId}&role=watcher`,
+      { method: "DELETE" }
+    )
+    if (!response.ok) return
+    const body = (await response.json()) as { item: TaskDetail }
+    applyTask(body.item)
+  }
+
+  const addCoAssignee = async () => {
+    if (!selectedCoAssigneeId) return
+    const response = await fetch(`/api/tasks/${task.id}/participants`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: selectedCoAssigneeId, role: "co_assignee" }),
+    })
+    if (!response.ok) return
+    const body = (await response.json()) as { item: TaskDetail }
+    applyTask(body.item)
+    setSelectedCoAssigneeId(null)
+  }
+
+  const removeCoAssignee = async (userId: string) => {
+    const response = await fetch(
+      `/api/tasks/${task.id}/participants?userId=${userId}&role=co_assignee`,
       { method: "DELETE" }
     )
     if (!response.ok) return
@@ -198,12 +326,16 @@ export function TaskDetailContent({
     const response = await fetch(`/api/tasks/${task.id}/checklist`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title: checklistTitle.trim() }),
+      body: JSON.stringify({
+        title: checklistTitle.trim(),
+        assigneeId: checklistAssigneeId,
+      }),
     })
     if (!response.ok) return
     const body = (await response.json()) as { item: TaskDetail["checklist"][number] }
     setTask((prev) => ({ ...prev, checklist: [...prev.checklist, body.item] }))
     setChecklistTitle("")
+    setChecklistAssigneeId(null)
   }
 
   const toggleChecklistItem = async (itemId: string, isDone: boolean) => {
@@ -211,6 +343,20 @@ export function TaskDetailContent({
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ isDone }),
+    })
+    if (!response.ok) return
+    const body = (await response.json()) as { item: TaskDetail["checklist"][number] }
+    setTask((prev) => ({
+      ...prev,
+      checklist: prev.checklist.map((item) => (item.id === itemId ? body.item : item)),
+    }))
+  }
+
+  const updateChecklistAssignee = async (itemId: string, assigneeId: string | null) => {
+    const response = await fetch(`/api/tasks/${task.id}/checklist/${itemId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ assigneeId }),
     })
     if (!response.ok) return
     const body = (await response.json()) as { item: TaskDetail["checklist"][number] }
@@ -332,6 +478,22 @@ export function TaskDetailContent({
             <Paperclip className="mr-2 h-4 w-4" />
             Файл
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={copilotPending}
+            onClick={() => void runCopilot("checklist")}
+          >
+            CoPilot: чек-лист
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={copilotPending}
+            onClick={() => void runCopilot("chat_summary")}
+          >
+            CoPilot: саммари
+          </Button>
           <Button type="button" variant="destructive" size="icon" onClick={() => setDeleteOpen(true)}>
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -349,9 +511,9 @@ export function TaskDetailContent({
         }}
       />
 
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <div className="space-y-6">
-          <Card className="p-6 space-y-4">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-6">
+          <Card className="overflow-hidden p-6 space-y-4">
             <h2 className="text-lg font-semibold">Описание</h2>
             <Textarea
               defaultValue={task.description ?? ""}
@@ -398,20 +560,57 @@ export function TaskDetailContent({
             </div>
           </Card>
 
-          <Card className="p-6 space-y-4">
+          <Card className="overflow-hidden p-6 space-y-4">
             <h2 className="text-lg font-semibold">Участники</h2>
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-1">
+              <div className="min-w-0 space-y-1">
                 <Label className="text-muted-foreground">Постановщик</Label>
-                <p className="font-medium">{task.creatorName}</p>
+                <p className="break-words font-medium">{task.creatorName}</p>
               </div>
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <Label>Исполнитель</Label>
                 <EmployeePicker
                   employees={employees}
                   value={task.assigneeId}
                   onChange={(value) => void patchTask({ assigneeId: value })}
                 />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Соисполнители</Label>
+              <div className="flex flex-wrap gap-2">
+                {coAssignees.map((c) => (
+                  <Badge key={c.id} variant="secondary" className="gap-1">
+                    {c.userName}
+                    <button
+                      type="button"
+                      className="ml-1"
+                      onClick={() => void removeCoAssignee(c.userId)}
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                ))}
+                {coAssignees.length === 0 ? (
+                  <span className="text-sm text-muted-foreground">Не назначены</span>
+                ) : null}
+              </div>
+              <div className="flex min-w-0 gap-2">
+                <EmployeePicker
+                  employees={employees.filter(
+                    (e) =>
+                      e.userId !== task.creatorId &&
+                      e.userId !== task.assigneeId &&
+                      !coAssignees.some((c) => c.userId === e.userId) &&
+                      !watchers.some((w) => w.userId === e.userId)
+                  )}
+                  value={selectedCoAssigneeId}
+                  onChange={setSelectedCoAssigneeId}
+                  placeholder="Добавить соисполнителя"
+                />
+                <Button type="button" variant="outline" className="shrink-0" onClick={() => void addCoAssignee()}>
+                  Добавить
+                </Button>
               </div>
             </div>
             <div className="space-y-2">
@@ -429,19 +628,20 @@ export function TaskDetailContent({
                   <span className="text-sm text-muted-foreground">Не назначены</span>
                 ) : null}
               </div>
-              <div className="flex gap-2">
+              <div className="flex min-w-0 gap-2">
                 <EmployeePicker
                   employees={employees.filter(
                     (e) =>
                       e.userId !== task.creatorId &&
                       e.userId !== task.assigneeId &&
-                      !watchers.some((w) => w.userId === e.userId)
+                      !watchers.some((w) => w.userId === e.userId) &&
+                      !coAssignees.some((c) => c.userId === e.userId)
                   )}
                   value={selectedWatcherId}
                   onChange={setSelectedWatcherId}
                   placeholder="Добавить наблюдателя"
                 />
-                <Button type="button" variant="outline" onClick={() => void addWatcher()}>
+                <Button type="button" variant="outline" className="shrink-0" onClick={() => void addWatcher()}>
                   Добавить
                 </Button>
               </div>
@@ -510,6 +710,39 @@ export function TaskDetailContent({
           ) : null}
 
           <Card className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Связи</h2>
+              <Button type="button" variant="ghost" size="sm" onClick={() => void loadLinks()}>
+                Обновить
+              </Button>
+            </div>
+            {taskLinks.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Связей пока нет. Нажмите «Обновить», чтобы загрузить.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {taskLinks.map((link) => (
+                  <li key={link.id} className="text-sm">
+                    <Badge variant="outline" className="mr-2">
+                      {link.entityType}
+                    </Badge>
+                    {link.entityType === "ticket" ? (
+                      <Link href="/support" className="text-primary hover:underline">
+                        {link.entityId}
+                      </Link>
+                    ) : link.entityType === "chat_message" ? (
+                      <span className="text-muted-foreground">{link.entityId}</span>
+                    ) : (
+                      <span>{link.entityId}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <Card className="p-6 space-y-4">
             <h2 className="text-lg font-semibold">История</h2>
             {(task.activity ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">Пока нет изменений статуса, исполнителя или срока</p>
@@ -545,28 +778,64 @@ export function TaskDetailContent({
             </div>
             <div className="space-y-2">
               {task.checklist.map((item) => (
-                <label key={item.id} className="flex items-start gap-3 rounded-md border p-3">
-                  <Checkbox
-                    checked={item.isDone}
-                    onCheckedChange={(checked) =>
-                      void toggleChecklistItem(item.id, checked === true)
-                    }
-                  />
-                  <span className={item.isDone ? "line-through text-muted-foreground" : ""}>
-                    {item.title}
-                  </span>
-                </label>
+                <div key={item.id} className="space-y-2 rounded-md border p-3">
+                  <label className="flex items-start gap-3">
+                    <Checkbox
+                      checked={item.isDone}
+                      onCheckedChange={(checked) =>
+                        void toggleChecklistItem(item.id, checked === true)
+                      }
+                    />
+                    <span className={item.isDone ? "line-through text-muted-foreground" : ""}>
+                      {item.title}
+                    </span>
+                    {item.assigneeName ? (
+                      <Badge variant="outline" className="ml-auto shrink-0">
+                        {item.assigneeName}
+                      </Badge>
+                    ) : null}
+                  </label>
+                  <div className="pl-7">
+                    <Label className="mb-1 text-xs text-muted-foreground">
+                      Ответственный за пункт
+                    </Label>
+                    <EmployeePicker
+                      employees={participantEmployees}
+                      value={item.assigneeId}
+                      onChange={(value) => void updateChecklistAssignee(item.id, value)}
+                      placeholder="Ответственный за пункт"
+                    />
+                  </div>
+                </div>
               ))}
             </div>
-            <div className="flex gap-2">
+            <div className="space-y-2">
               <Input
                 value={checklistTitle}
                 onChange={(event) => setChecklistTitle(event.target.value)}
                 placeholder="Новый пункт"
               />
-              <Button type="button" variant="outline" onClick={() => void addChecklistItem()}>
-                Добавить
-              </Button>
+              <div className="flex gap-2">
+                <div className="min-w-0 flex-1">
+                  <Label className="mb-1 text-xs text-muted-foreground">
+                    Ответственный за пункт
+                  </Label>
+                  <EmployeePicker
+                    employees={participantEmployees}
+                    value={checklistAssigneeId}
+                    onChange={setChecklistAssigneeId}
+                    placeholder="Ответственный за пункт"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-5"
+                  onClick={() => void addChecklistItem()}
+                >
+                  Добавить
+                </Button>
+              </div>
             </div>
           </Card>
 
@@ -601,7 +870,7 @@ export function TaskDetailContent({
           </Card>
         </div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <Card className="p-6 space-y-3 text-sm">
             <h2 className="text-lg font-semibold">Сведения</h2>
             <div>

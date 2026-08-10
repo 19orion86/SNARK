@@ -3,7 +3,7 @@ import { and, eq, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
 import { taskLinks, tasks, users } from "@/lib/db/schema"
 import { isMockDb } from "@/lib/config/mode"
-import { matchAssigneeExact } from "@/lib/protocols/match-assignee"
+import { matchAssigneeFuzzy } from "@/lib/protocols/match-assignee"
 import { createNotification } from "@/lib/repositories/notifications.repository"
 import { createTask } from "@/lib/repositories/tasks.repository"
 import type { PortalTask, TaskPriority } from "@/types/portal"
@@ -170,7 +170,7 @@ export async function syncProtocolActionItems(
         continue
       }
 
-      const assigneeId = matchAssigneeExact(item.assignee, directory)
+      const assigneeId = matchAssigneeFuzzy(item.assignee, directory, 0.9)
       const requiresAssignment = !assigneeId
       const title = item.text.trim().slice(0, 500) || `Поручение из протокола #${payload.protocolId}`
       const description = buildDescription({

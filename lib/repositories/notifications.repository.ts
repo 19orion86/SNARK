@@ -1,8 +1,9 @@
 import "server-only"
 import { and, desc, eq, isNull, sql } from "drizzle-orm"
 import { db } from "@/lib/db/client"
-import { notifications } from "@/lib/db/schema"
+import { notificationPreferences, notifications, users } from "@/lib/db/schema"
 import { isMockDb } from "@/lib/config/mode"
+import { sendEmail } from "@/lib/email/send"
 import { getRealtimeBus } from "@/lib/realtime/bus"
 
 export type NotificationType =
@@ -83,6 +84,19 @@ export async function createNotification(input: {
     }
     mockNotifications.unshift(item)
     publishNotification(item)
+    void import("@/lib/push/web-push")
+      .then(({ sendPushToUser }) =>
+        sendPushToUser(item.userId, {
+          title: item.title,
+          body: item.title,
+          data: {
+            type: item.type,
+            entityType: item.entityType,
+            entityId: item.entityId,
+          },
+        })
+      )
+      .catch(() => {})
     return item
   }
 
@@ -99,7 +113,55 @@ export async function createNotification(input: {
 
   const item = mapRow(row)
   publishNotification(item)
+  void dispatchEmailNotification(item).catch(() => {})
+  void import("@/lib/push/web-push")
+    .then(({ sendPushToUser }) =>
+      sendPushToUser(item.userId, {
+        title: item.title,
+        body: item.title,
+        data: {
+          type: item.type,
+          entityType: item.entityType,
+          entityId: item.entityId,
+        },
+        url:
+          item.entityType === "task" && item.entityId
+            ? `/tasks/${item.entityId}`
+            : item.entityType === "chat_channel" && item.entityId
+              ? `/chat?channel=${item.entityId}`
+              : undefined,
+      })
+    )
+    .catch(() => {})
   return item
+}
+
+async function dispatchEmailNotification(item: PortalNotification): Promise<void> {
+  if (isMockDb()) return
+  const [prefs] = await db
+    .select()
+    .from(notificationPreferences)
+    .where(eq(notificationPreferences.userId, item.userId))
+    .limit(1)
+  if (prefs && prefs.emailEnabled === false) return
+
+  const [user] = await db
+    .select({ email: users.email, firstName: users.firstName, lastName: users.lastName })
+    .from(users)
+    .where(eq(users.id, item.userId))
+    .limit(1)
+  if (!user?.email) return
+
+  const link =
+    item.entityType === "task" && item.entityId
+      ? `${process.env.APP_URL ?? ""}/tasks/${item.entityId}`
+      : process.env.APP_URL ?? ""
+
+  await sendEmail({
+    to: user.email,
+    subject: `[SNARK] ${item.title}`,
+    text: `${item.title}\n\n${link}`.trim(),
+  })
 }
 
 export async function listNotifications(

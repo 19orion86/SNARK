@@ -39,6 +39,7 @@ import type {
   TaskCreatePayload,
   TaskDetail,
   TaskFromMessagePayload,
+  TaskParticipant,
   TaskParticipantRole,
   TaskPriority,
   TasksListResponse,
@@ -71,6 +72,7 @@ type TaskRow = {
   creatorLastName: string
   departmentId: string | null
   departmentName: string | null
+  projectId: string | null
   dueDate: string | null
   parentTaskId: string | null
   protocolActionItemId: number | null
@@ -102,6 +104,7 @@ function mapTaskRow(row: TaskRow): PortalTask {
     creatorName,
     departmentId: row.departmentId,
     departmentName: row.departmentName,
+    projectId: row.projectId,
     dueDate: row.dueDate,
     parentTaskId: row.parentTaskId,
     protocolActionItemId: row.protocolActionItemId,
@@ -133,6 +136,7 @@ const taskSelectFields = {
   creatorLastName: creator.lastName,
   departmentId: tasks.departmentId,
   departmentName: dept.name,
+  projectId: tasks.projectId,
   dueDate: tasks.dueDate,
   parentTaskId: tasks.parentTaskId,
   protocolActionItemId: tasks.protocolActionItemId,
@@ -165,6 +169,7 @@ const globalForMockTasks = globalThis as unknown as {
   __snarkMockComments?: TaskComment[]
   __snarkMockAttachments?: TaskAttachment[]
   __snarkMockActivity?: TaskActivityItem[]
+  __snarkMockParticipants?: TaskParticipant[]
 }
 
 const seedMockTask: PortalTask = {
@@ -198,6 +203,7 @@ if (!globalForMockTasks.__snarkMockTasks) {
   globalForMockTasks.__snarkMockComments = []
   globalForMockTasks.__snarkMockAttachments = []
   globalForMockTasks.__snarkMockActivity = []
+  globalForMockTasks.__snarkMockParticipants = []
 }
 
 const mockTasks = globalForMockTasks.__snarkMockTasks!
@@ -205,15 +211,56 @@ const mockChecklist = globalForMockTasks.__snarkMockChecklist!
 const mockComments = globalForMockTasks.__snarkMockComments!
 const mockAttachments = globalForMockTasks.__snarkMockAttachments!
 const mockActivity = globalForMockTasks.__snarkMockActivity!
+if (!globalForMockTasks.__snarkMockParticipants) {
+  globalForMockTasks.__snarkMockParticipants = []
+}
+const mockParticipants = globalForMockTasks.__snarkMockParticipants!
 
 async function isTaskParticipant(taskId: string, userId: string): Promise<boolean> {
-  if (isMockDb()) return false
+  if (isMockDb()) {
+    return mockParticipants.some((p) => p.taskId === taskId && p.userId === userId)
+  }
   const [row] = await db
     .select({ id: taskParticipants.id })
     .from(taskParticipants)
     .where(and(eq(taskParticipants.taskId, taskId), eq(taskParticipants.userId, userId)))
     .limit(1)
   return Boolean(row)
+}
+
+function assertCanUpdateTask(
+  existing: TaskDetail,
+  payload: TaskUpdatePayload,
+  userId: string,
+  role?: string
+): void {
+  if (role === "admin" || role === "hr_manager" || existing.creatorId === userId) {
+    return
+  }
+
+  const isAssignee = existing.assigneeId === userId
+  const participantRole = existing.participants.find((p) => p.userId === userId)?.role
+
+  if (isAssignee) {
+    return
+  }
+
+  if (participantRole === "co_assignee") {
+    const keys = (Object.keys(payload) as (keyof TaskUpdatePayload)[]).filter(
+      (key) => payload[key] !== undefined
+    )
+    const onlyStatus = keys.length === 1 && keys[0] === "status"
+    const statusAllowed =
+      payload.status === "in_progress" || payload.status === "review"
+    if (onlyStatus && statusAllowed) return
+    throw new Error("Нет прав")
+  }
+
+  if (participantRole === "watcher") {
+    throw new Error("Нет прав")
+  }
+
+  throw new Error("Нет прав")
 }
 
 async function canAccessTask(task: PortalTask, userId: string, role?: string): Promise<boolean> {
@@ -235,7 +282,8 @@ export async function listTasks(
         role === "admin" ||
         role === "hr_manager" ||
         task.assigneeId === userId ||
-        task.creatorId === userId
+        task.creatorId === userId ||
+        mockParticipants.some((p) => p.taskId === task.id && p.userId === userId)
     )
     if (!query?.includeSubtasks && !query?.parentTaskId) {
       filtered = filtered.filter((task) => !task.parentTaskId)
@@ -249,6 +297,7 @@ export async function listTasks(
     if (query?.assigneeId) filtered = filtered.filter((t) => t.assigneeId === query.assigneeId)
     if (query?.creatorId) filtered = filtered.filter((t) => t.creatorId === query.creatorId)
     if (query?.departmentId) filtered = filtered.filter((t) => t.departmentId === query.departmentId)
+    if (query?.projectId) filtered = filtered.filter((t) => t.projectId === query.projectId)
     if (query?.priority) filtered = filtered.filter((t) => t.priority === query.priority)
     if (query?.q) {
       const q = query.q.toLowerCase()
@@ -256,6 +305,20 @@ export async function listTasks(
     }
     if (query?.scope === "mine") filtered = filtered.filter((t) => t.assigneeId === userId)
     if (query?.scope === "created") filtered = filtered.filter((t) => t.creatorId === userId)
+    if (query?.scope === "watching") {
+      filtered = filtered.filter((t) =>
+        mockParticipants.some(
+          (p) => p.taskId === t.id && p.userId === userId && p.role === "watcher"
+        )
+      )
+    }
+    if (query?.scope === "co_assignee") {
+      filtered = filtered.filter((t) =>
+        mockParticipants.some(
+          (p) => p.taskId === t.id && p.userId === userId && p.role === "co_assignee"
+        )
+      )
+    }
     if (query?.scope === "important") filtered = filtered.filter((t) => t.isImportant)
     if (query?.scope === "overdue" || query?.overdue) {
       filtered = filtered.filter((t) => isTaskOverdue(t))
@@ -305,6 +368,9 @@ export async function listTasks(
   if (query?.departmentId) {
     conditions.push(eq(tasks.departmentId, query.departmentId))
   }
+  if (query?.projectId) {
+    conditions.push(eq(tasks.projectId, query.projectId))
+  }
   if (query?.priority) {
     conditions.push(eq(tasks.priority, query.priority))
   }
@@ -332,6 +398,21 @@ export async function listTasks(
               eq(taskParticipants.taskId, tasks.id),
               eq(taskParticipants.userId, userId),
               eq(taskParticipants.role, "watcher")
+            )
+          )
+      )
+    )
+  } else if (query?.scope === "co_assignee") {
+    conditions.push(
+      exists(
+        db
+          .select({ id: taskParticipants.id })
+          .from(taskParticipants)
+          .where(
+            and(
+              eq(taskParticipants.taskId, tasks.id),
+              eq(taskParticipants.userId, userId),
+              eq(taskParticipants.role, "co_assignee")
             )
           )
       )
@@ -627,14 +708,15 @@ export async function getTaskDetail(
       role === "admin" ||
       role === "hr_manager" ||
       task.assigneeId === userId ||
-      task.creatorId === userId
+      task.creatorId === userId ||
+      mockParticipants.some((p) => p.taskId === id && p.userId === userId)
     if (!allowed) return null
     return {
       ...task,
       isOverdue: isTaskOverdue(task),
       checklist: mockChecklist.filter((item) => item.taskId === id),
       comments: mockComments.filter((item) => item.taskId === id),
-      participants: [],
+      participants: mockParticipants.filter((item) => item.taskId === id),
       attachments: mockAttachments.filter((item) => item.taskId === id),
       subtasks: await loadSubtasks(id),
       activity: await loadActivity(id),
@@ -658,20 +740,45 @@ export async function getTaskDetail(
   return { ...task, checklist, comments, participants, attachments, subtasks, activity }
 }
 
-async function saveWatchers(taskId: string, watcherIds: string[]): Promise<void> {
-  if (watcherIds.length === 0) return
+async function saveParticipants(
+  taskId: string,
+  userIds: string[],
+  role: TaskParticipantRole
+): Promise<void> {
+  if (userIds.length === 0) return
   await db
     .insert(taskParticipants)
     .values(
-      watcherIds.map((userId) => ({
+      userIds.map((userId) => ({
         taskId,
         userId,
-        role: "watcher" as const,
+        role,
       }))
     )
     .onConflictDoNothing({
       target: [taskParticipants.taskId, taskParticipants.userId, taskParticipants.role],
     })
+}
+
+function pushMockParticipants(
+  taskId: string,
+  userIds: string[],
+  role: TaskParticipantRole
+): void {
+  for (const userId of userIds) {
+    const exists = mockParticipants.some(
+      (p) => p.taskId === taskId && p.userId === userId && p.role === role
+    )
+    if (exists) continue
+    mockParticipants.push({
+      id: crypto.randomUUID(),
+      taskId,
+      userId,
+      userName: userId,
+      role,
+      createdAt: new Date().toISOString(),
+    })
+  }
 }
 
 export async function createTask(
@@ -692,6 +799,7 @@ export async function createTask(
       creatorName: "Вы",
       departmentId: payload.departmentId ?? null,
       departmentName: null,
+      projectId: payload.projectId ?? null,
       dueDate: payload.dueDate ?? null,
       parentTaskId: payload.parentTaskId ?? null,
       protocolActionItemId: payload.protocolActionItemId ?? null,
@@ -709,11 +817,18 @@ export async function createTask(
     mockTasks.unshift(task)
     // Подзадачи не создают отдельный чат — чат у корня
     if (!payload.parentTaskId) {
-      const channelId = await ensureTaskChatChannel(task, payload.watcherIds ?? [])
+      const watcherIds = payload.watcherIds ?? []
+      const coAssigneeIds = payload.coAssigneeIds ?? []
+      pushMockParticipants(task.id, watcherIds, "watcher")
+      pushMockParticipants(task.id, coAssigneeIds, "co_assignee")
+      const channelId = await ensureTaskChatChannel(task, [...watcherIds, ...coAssigneeIds])
       if (channelId) {
         const index = mockTasks.findIndex((item) => item.id === task.id)
         if (index >= 0) mockTasks[index] = { ...mockTasks[index], chatChannelId: channelId }
       }
+    } else {
+      pushMockParticipants(task.id, payload.watcherIds ?? [], "watcher")
+      pushMockParticipants(task.id, payload.coAssigneeIds ?? [], "co_assignee")
     }
     const result = mockTasks.find((item) => item.id === task.id) ?? task
     if (
@@ -741,6 +856,7 @@ export async function createTask(
       assigneeId: payload.assigneeId ?? null,
       creatorId: payload.creatorId,
       departmentId: payload.departmentId ?? null,
+      projectId: payload.projectId ?? null,
       dueDate: payload.dueDate ?? null,
       parentTaskId: payload.parentTaskId ?? null,
       protocolActionItemId: payload.protocolActionItemId ?? null,
@@ -751,7 +867,10 @@ export async function createTask(
     .returning({ id: tasks.id })
 
   if (payload.watcherIds?.length) {
-    await saveWatchers(created.id, payload.watcherIds)
+    await saveParticipants(created.id, payload.watcherIds, "watcher")
+  }
+  if (payload.coAssigneeIds?.length) {
+    await saveParticipants(created.id, payload.coAssigneeIds, "co_assignee")
   }
 
   if (payload.sourceMessageId) {
@@ -784,6 +903,16 @@ export async function createTask(
     })
   }
 
+  void import("@/lib/automation/engine")
+    .then(({ runAutomationRules }) =>
+      runAutomationRules({
+        trigger: "task.created",
+        actorId: payload.creatorId,
+        payload: { taskId: task.id, title: task.title },
+      })
+    )
+    .catch(() => {})
+
   return task
 }
 
@@ -810,6 +939,7 @@ export async function updateTask(
 ): Promise<TaskDetail> {
   const existing = await getTaskDetail(id, userId, role)
   if (!existing) throw new Error("Задача не найдена")
+  assertCanUpdateTask(existing, payload, userId, role)
   const previousStatus = existing.status
 
   if (isMockDb()) {
@@ -893,6 +1023,7 @@ export async function updateTask(
   if (payload.priority !== undefined) updateSet.priority = payload.priority
   if (payload.assigneeId !== undefined) updateSet.assigneeId = payload.assigneeId
   if (payload.departmentId !== undefined) updateSet.departmentId = payload.departmentId
+  if (payload.projectId !== undefined) updateSet.projectId = payload.projectId
   if (payload.dueDate !== undefined) updateSet.dueDate = payload.dueDate
   if (payload.isImportant !== undefined) updateSet.isImportant = payload.isImportant
   if (payload.completionResult !== undefined) updateSet.completionResult = payload.completionResult
@@ -993,7 +1124,10 @@ export async function addChecklistItem(
       title: payload.title,
       isDone: false,
       assigneeId: payload.assigneeId ?? null,
-      assigneeName: null,
+      assigneeName:
+        payload.assigneeId
+          ? mockParticipants.find((p) => p.userId === payload.assigneeId)?.userName ?? null
+          : null,
       sortOrder: mockChecklist.filter((i) => i.taskId === taskId).length,
       completedAt: null,
       createdAt: new Date().toISOString(),
@@ -1036,11 +1170,19 @@ export async function updateChecklistItem(
   if (isMockDb()) {
     const index = mockChecklist.findIndex((item) => item.id === itemId && item.taskId === taskId)
     if (index < 0) throw new Error("Пункт не найден")
+    const nextAssigneeId =
+      payload.assigneeId !== undefined ? payload.assigneeId : mockChecklist[index].assigneeId
     mockChecklist[index] = {
       ...mockChecklist[index],
       title: payload.title ?? mockChecklist[index].title,
       isDone: payload.isDone ?? mockChecklist[index].isDone,
-      assigneeId: payload.assigneeId ?? mockChecklist[index].assigneeId,
+      assigneeId: nextAssigneeId,
+      assigneeName:
+        payload.assigneeId !== undefined
+          ? payload.assigneeId
+            ? mockParticipants.find((p) => p.userId === payload.assigneeId)?.userName ?? null
+            : null
+          : mockChecklist[index].assigneeName,
       completedAt:
         payload.isDone === true
           ? new Date().toISOString()
@@ -1133,6 +1275,16 @@ async function notifyTaskComment(
   const recipients = new Set<string>()
   if (task.creatorId) recipients.add(task.creatorId)
   if (task.assigneeId) recipients.add(task.assigneeId)
+  if (isMockDb()) {
+    for (const participant of mockParticipants.filter((p) => p.taskId === task.id)) {
+      recipients.add(participant.userId)
+    }
+  } else {
+    const participantIds = await getTaskParticipantIds(task.id)
+    for (const participantId of participantIds) {
+      recipients.add(participantId)
+    }
+  }
   recipients.delete(authorId)
   const snippet = body.slice(0, 80)
   for (const recipientId of recipients) {
@@ -1217,7 +1369,23 @@ export async function addTaskParticipant(
   if (!canEdit) throw new Error("Нет прав на изменение участников")
 
   if (isMockDb()) {
-    return task
+    const already = mockParticipants.some(
+      (p) =>
+        p.taskId === taskId && p.userId === participantUserId && p.role === participantRole
+    )
+    if (!already) {
+      mockParticipants.push({
+        id: crypto.randomUUID(),
+        taskId,
+        userId: participantUserId,
+        userName: participantUserId,
+        role: participantRole,
+        createdAt: new Date().toISOString(),
+      })
+    }
+    const updated = await getTaskDetail(taskId, userId, role)
+    if (!updated) throw new Error("Задача не найдена")
+    return updated
   }
 
   await db
@@ -1253,7 +1421,14 @@ export async function removeTaskParticipant(
   if (!task) throw new Error("Задача не найдена")
 
   if (isMockDb()) {
-    return task
+    const index = mockParticipants.findIndex(
+      (p) =>
+        p.taskId === taskId && p.userId === participantUserId && p.role === participantRole
+    )
+    if (index >= 0) mockParticipants.splice(index, 1)
+    const updated = await getTaskDetail(taskId, userId, role)
+    if (!updated) throw new Error("Задача не найдена")
+    return updated
   }
 
   await db

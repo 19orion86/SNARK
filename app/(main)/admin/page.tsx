@@ -56,6 +56,9 @@ export default async function AdminPage() {
             <Link href="/admin/support-categories">
               <Button variant="outline">Категории поддержки</Button>
             </Link>
+            <Link href="/admin/ticket-sla">
+              <Button variant="outline">SLA</Button>
+            </Link>
           </div>
         </Card>
 
@@ -94,6 +97,30 @@ export default async function AdminPage() {
             </Link>
             <Link href="/admin/structure-import">
               <Button variant="outline">Импорт из 1С</Button>
+            </Link>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold text-card-foreground">Задачи</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Сводная статистика по задачам и быстрый переход в таск-менеджер.
+          </p>
+          <div className="mt-4">
+            <Link href="/admin/tasks">
+              <Button className="bg-[#16223b] hover:bg-[#16223b]/90">Открыть раздел</Button>
+            </Link>
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold text-card-foreground">Чат / AI CoPilot</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Статус AI-ключа и переход к внутреннему чату.
+          </p>
+          <div className="mt-4">
+            <Link href="/admin/chat">
+              <Button className="bg-[#16223b] hover:bg-[#16223b]/90">Открыть раздел</Button>
             </Link>
           </div>
         </Card>

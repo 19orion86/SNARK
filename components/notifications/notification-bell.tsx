@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
-import { Bell } from "lucide-react"
+import { Bell, BellRing } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -45,10 +45,21 @@ function formatWhen(value: string): string {
   }
 }
 
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/")
+  const raw = atob(base64)
+  const output = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) output[i] = raw.charCodeAt(i)
+  return output
+}
+
 export function NotificationBell() {
   const [items, setItems] = useState<PortalNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [open, setOpen] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
+  const [pushLabel, setPushLabel] = useState("Push")
 
   const load = useCallback(async () => {
     const response = await fetch("/api/notifications")
@@ -110,7 +121,67 @@ export function NotificationBell() {
     setUnreadCount((count) => Math.max(0, count - 1))
   }
 
+  const subscribePush = async () => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setPushLabel("Нет поддержки")
+      return
+    }
+    setPushBusy(true)
+    try {
+      const permission = await Notification.requestPermission()
+      if (permission !== "granted") {
+        setPushLabel("Запрещено")
+        return
+      }
+      const keyRes = await fetch("/api/push/vapid-public-key")
+      if (!keyRes.ok) {
+        setPushLabel("Нет ключа")
+        return
+      }
+      const { publicKey } = (await keyRes.json()) as { publicKey?: string | null }
+      if (!publicKey) {
+        setPushLabel("Нет ключа")
+        return
+      }
+      const registration = await navigator.serviceWorker.ready
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
+      })
+      const json = subscription.toJSON()
+      const response = await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          endpoint: json.endpoint,
+          keys: {
+            p256dh: json.keys?.p256dh,
+            auth: json.keys?.auth,
+          },
+        }),
+      })
+      setPushLabel(response.ok ? "Подключено" : "Ошибка")
+    } catch {
+      setPushLabel("Ошибка")
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
   return (
+    <div className="flex items-center gap-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="hidden text-white/90 hover:bg-white/10 hover:text-white sm:inline-flex"
+        disabled={pushBusy}
+        onClick={() => void subscribePush()}
+        title="Подписка на push"
+      >
+        <BellRing className="mr-1 h-4 w-4" />
+        {pushLabel}
+      </Button>
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button
@@ -177,5 +248,6 @@ export function NotificationBell() {
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+    </div>
   )
 }

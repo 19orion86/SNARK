@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Flame, MessageSquare, Paperclip, Play, Trash2 } from "lucide-react"
 import { EmployeePicker } from "@/components/shared/employee-picker"
@@ -32,8 +32,14 @@ import {
 } from "@/lib/portal-data/tasks-ui"
 import { isTaskOverdue } from "@/lib/tasks/overdue"
 import { cn } from "@/lib/utils"
+import { TaskCalendar } from "@/components/tasks/task-calendar"
 import { TaskKanban } from "@/components/tasks/task-kanban"
 import type { Employee, PortalTask, TaskPriority, TasksListResponse } from "@/types/portal"
+
+interface TaskProjectOption {
+  id: string
+  name: string
+}
 
 interface TasksPageContentProps {
   initial: TasksListResponse
@@ -44,6 +50,7 @@ interface TasksPageContentProps {
     status: string
     priority: string
     q: string
+    projectId: string
   }
 }
 
@@ -84,36 +91,131 @@ export function TasksPageContent({
   const [scope, setScope] = useState<ScopeTab>((initialFilters.scope as ScopeTab) || "all")
   const [statusFilter, setStatusFilter] = useState(initialFilters.status || "all")
   const [priorityFilter, setPriorityFilter] = useState(initialFilters.priority || "all")
+  const [projectFilter, setProjectFilter] = useState(initialFilters.projectId || "all")
+  const [projects, setProjects] = useState<TaskProjectOption[]>([])
   const [search, setSearch] = useState(initialFilters.q)
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [priority, setPriority] = useState<TaskPriority>("medium")
   const [dueDate, setDueDate] = useState("")
   const [assigneeId, setAssigneeId] = useState<string | null>(null)
+  const [createProjectId, setCreateProjectId] = useState<string | null>(
+    initialFilters.projectId && initialFilters.projectId !== "all" ? initialFilters.projectId : null
+  )
   const [watcherIds, setWatcherIds] = useState<string[]>([])
   const [selectedWatcherId, setSelectedWatcherId] = useState<string | null>(null)
+  const [coAssigneeIds, setCoAssigneeIds] = useState<string[]>([])
+  const [selectedCoAssigneeId, setSelectedCoAssigneeId] = useState<string | null>(null)
   const [createFile, setCreateFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [completeTask, setCompleteTask] = useState<PortalTask | null>(null)
   const [completionResult, setCompletionResult] = useState("")
   const [completeFile, setCompleteFile] = useState<File | null>(null)
-  const [view, setView] = useState<"list" | "kanban">("list")
+  const [view, setView] = useState<"list" | "kanban" | "calendar">("list")
+  const [calendarTasks, setCalendarTasks] = useState<PortalTask[]>(initial.items)
+  const [templates, setTemplates] = useState<Array<{ id: string; name: string }>>([])
+  const [creatingFromTemplate, setCreatingFromTemplate] = useState(false)
+
+  useEffect(() => {
+    setCalendarTasks(initial.items)
+  }, [initial.items])
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const response = await fetch("/api/task-projects")
+        if (!response.ok) return
+        const body = (await response.json()) as { items: TaskProjectOption[] }
+        if (mounted) setProjects(body.items ?? [])
+      } catch {
+        // ignore
+      }
+    })()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const response = await fetch("/api/task-templates")
+        if (!response.ok) return
+        const body = (await response.json()) as { items: Array<{ id: string; name: string }> }
+        if (mounted) setTemplates(body.items ?? [])
+      } catch {
+        // ignore
+      }
+    })()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (view !== "calendar") return
+    let mounted = true
+    ;(async () => {
+      try {
+        const params = new URLSearchParams()
+        if (scope && scope !== "all") params.set("scope", scope)
+        if (statusFilter && statusFilter !== "all") params.set("status", statusFilter)
+        if (priorityFilter && priorityFilter !== "all") params.set("priority", priorityFilter)
+        if (projectFilter && projectFilter !== "all") params.set("projectId", projectFilter)
+        if (search.trim()) params.set("q", search.trim())
+        params.set("limit", "100")
+        const response = await fetch(`/api/tasks?${params.toString()}`)
+        if (!response.ok) return
+        const body = (await response.json()) as { items: PortalTask[] }
+        if (mounted) setCalendarTasks(body.items ?? initial.items)
+      } catch {
+        if (mounted) setCalendarTasks(initial.items)
+      }
+    })()
+    return () => {
+      mounted = false
+    }
+  }, [view, scope, statusFilter, priorityFilter, projectFilter, search, initial.items])
+
+  const createFromTemplate = async (templateId: string) => {
+    if (!templateId || templateId === "none") return
+    setCreatingFromTemplate(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/tasks/from-template/${templateId}`, { method: "POST" })
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string }
+        setError(body.error ?? "Не удалось создать задачу из шаблона")
+        return
+      }
+      startTransition(() => router.refresh())
+    } catch {
+      setError("Сетевая ошибка")
+    } finally {
+      setCreatingFromTemplate(false)
+    }
+  }
 
   const applyFilters = (next: {
     scope?: ScopeTab
     status?: string
     priority?: string
+    projectId?: string
     q?: string
   }) => {
     const params = new URLSearchParams()
     const nextScope = next.scope ?? scope
     const nextStatus = next.status ?? statusFilter
     const nextPriority = next.priority ?? priorityFilter
+    const nextProject = next.projectId ?? projectFilter
     const nextQ = next.q ?? search
     if (nextScope && nextScope !== "all") params.set("scope", nextScope)
     if (nextStatus && nextStatus !== "all") params.set("status", nextStatus)
     if (nextPriority && nextPriority !== "all") params.set("priority", nextPriority)
+    if (nextProject && nextProject !== "all") params.set("projectId", nextProject)
     if (nextQ.trim()) params.set("q", nextQ.trim())
     const qs = params.toString()
     startTransition(() => router.push(qs ? `/tasks?${qs}` : "/tasks"))
@@ -139,7 +241,9 @@ export function TasksPageContent({
           priority,
           dueDate: dueDate || undefined,
           assigneeId,
+          projectId: createProjectId || undefined,
           watcherIds: watcherIds.length > 0 ? watcherIds : undefined,
+          coAssigneeIds: coAssigneeIds.length > 0 ? coAssigneeIds : undefined,
         }),
       })
       if (!response.ok) {
@@ -316,6 +420,72 @@ export function TasksPageContent({
               <Label>Исполнитель</Label>
               <EmployeePicker employees={employees} value={assigneeId} onChange={setAssigneeId} />
             </div>
+            {projects.length > 0 ? (
+              <div className="space-y-2">
+                <Label>Проект</Label>
+                <Select
+                  value={createProjectId ?? "none"}
+                  onValueChange={(value) => setCreateProjectId(value === "none" ? null : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Без проекта" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Без проекта</SelectItem>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+            <div className="space-y-2 md:col-span-2">
+              <Label>Соисполнители</Label>
+              <div className="mb-2 flex flex-wrap gap-2">
+                {coAssigneeIds.map((id) => {
+                  const employee = employees.find((e) => e.userId === id)
+                  return (
+                    <Badge key={id} variant="secondary" className="gap-1">
+                      {employee?.name ?? id}
+                      <button
+                        type="button"
+                        className="ml-1"
+                        onClick={() => setCoAssigneeIds((prev) => prev.filter((w) => w !== id))}
+                      >
+                        ×
+                      </button>
+                    </Badge>
+                  )
+                })}
+              </div>
+              <div className="flex gap-2">
+                <EmployeePicker
+                  employees={employees.filter(
+                    (e) =>
+                      e.userId !== assigneeId &&
+                      !coAssigneeIds.includes(e.userId) &&
+                      !watcherIds.includes(e.userId)
+                  )}
+                  value={selectedCoAssigneeId}
+                  onChange={setSelectedCoAssigneeId}
+                  placeholder="Добавить соисполнителя"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    if (selectedCoAssigneeId && !coAssigneeIds.includes(selectedCoAssigneeId)) {
+                      setCoAssigneeIds((prev) => [...prev, selectedCoAssigneeId])
+                      setSelectedCoAssigneeId(null)
+                    }
+                  }}
+                >
+                  Добавить
+                </Button>
+              </div>
+            </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Наблюдатели</Label>
               <div className="mb-2 flex flex-wrap gap-2">
@@ -338,7 +508,10 @@ export function TasksPageContent({
               <div className="flex gap-2">
                 <EmployeePicker
                   employees={employees.filter(
-                    (e) => e.userId !== assigneeId && !watcherIds.includes(e.userId)
+                    (e) =>
+                      e.userId !== assigneeId &&
+                      !watcherIds.includes(e.userId) &&
+                      !coAssigneeIds.includes(e.userId)
                   )}
                   value={selectedWatcherId}
                   onChange={setSelectedWatcherId}
@@ -407,10 +580,39 @@ export function TasksPageContent({
               >
                 Канбан
               </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={view === "calendar" ? "default" : "outline"}
+                onClick={() => setView("calendar")}
+              >
+                Календарь
+              </Button>
+              {templates.length > 0 ? (
+                <Select
+                  value="none"
+                  onValueChange={(value) => void createFromTemplate(value)}
+                  disabled={creatingFromTemplate}
+                >
+                  <SelectTrigger className="h-8 w-[160px]">
+                    <SelectValue placeholder="Из шаблона" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none" disabled>
+                      Из шаблона
+                    </SelectItem>
+                    {templates.map((template) => (
+                      <SelectItem key={template.id} value={template.id}>
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
               <span>Всего: {initial.total}</span>
             </span>
           </div>
-          <div className="grid gap-2 md:grid-cols-4">
+          <div className="grid gap-2 md:grid-cols-5">
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -457,13 +659,34 @@ export function TasksPageContent({
                 ))}
               </SelectContent>
             </Select>
+            <Select
+              value={projectFilter}
+              onValueChange={(value) => {
+                setProjectFilter(value)
+                applyFilters({ projectId: value })
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Проект" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все проекты</SelectItem>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button type="button" variant="outline" onClick={() => applyFilters({ q: search })}>
               Найти
             </Button>
           </div>
         </div>
 
-        {view === "kanban" ? (
+        {view === "calendar" ? (
+          <TaskCalendar tasks={calendarTasks} />
+        ) : view === "kanban" ? (
           <TaskKanban tasks={tasks} onStatusChange={(taskId, status) => patchStatus(taskId, status)} />
         ) : tasks.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Задач нет</p>

@@ -29,6 +29,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
   const scope = first(sp.scope) as TasksQuery["scope"] | undefined
   const status = first(sp.status) as TaskStatus | "all" | undefined
   const priority = first(sp.priority) as TaskPriority | undefined
+  const projectId = first(sp.projectId)
   const q = first(sp.q)
   const overdue = first(sp.overdue) === "true"
 
@@ -38,6 +39,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
     scope: scope && scope !== "all" ? scope : overdue ? "overdue" : undefined,
     status: status && status !== "all" ? status : undefined,
     priority,
+    projectId: projectId || undefined,
     q: q || undefined,
     overdue: overdue || undefined,
   }
@@ -57,6 +59,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
         status: status ?? "all",
         priority: priority ?? "all",
         q: q ?? "",
+        projectId: projectId ?? "all",
       }}
     />
   )

@@ -72,6 +72,7 @@ export function StructureImport({ onImported }: StructureImportProps) {
   const [result, setResult] = useState<OrgStructureImportResult | null>(null)
   const [applyDepartments, setApplyDepartments] = useState(true)
   const [applyEmployees, setApplyEmployees] = useState(true)
+  const [syncMode, setSyncMode] = useState<"merge" | "replace" | "sync">("merge")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -142,7 +143,7 @@ export function StructureImport({ onImported }: StructureImportProps) {
       formData.append("mode", "apply")
       formData.append("applyDepartments", String(applyDepartments))
       formData.append("applyEmployees", String(applyEmployees))
-      formData.append("syncMode", "merge")
+      formData.append("syncMode", syncMode)
 
       const response = await fetch("/api/admin/structure/import", {
         method: "POST",
@@ -271,6 +272,19 @@ export function StructureImport({ onImported }: StructureImportProps) {
               <Label htmlFor="apply-employees">
                 Загрузить сотрудников из файла (создать новых и обновить существующих по ФИО)
               </Label>
+            </div>
+            <div className="space-y-2 pt-2">
+              <Label htmlFor="sync-mode">Режим синхронизации</Label>
+              <select
+                id="sync-mode"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={syncMode}
+                onChange={(e) => setSyncMode(e.target.value as "merge" | "replace" | "sync")}
+              >
+                <option value="merge">merge — только добавить/обновить</option>
+                <option value="sync">sync — синхронизация по файлу</option>
+                <option value="replace">replace — полная замена</option>
+              </select>
             </div>
           </div>
 

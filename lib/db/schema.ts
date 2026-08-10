@@ -151,6 +151,23 @@ export const vacations = pgTable("vacations", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 })
 
+export const vacationApprovals = pgTable(
+  "vacation_approvals",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    vacationId: uuid("vacation_id")
+      .notNull()
+      .references(() => vacations.id, { onDelete: "cascade" }),
+    step: text("step").notNull(),
+    approverId: uuid("approver_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+    status: text("status").notNull().default("pending"),
+    comment: text("comment"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("vacation_approvals_vacation_idx").on(table.vacationId, table.createdAt)]
+)
+
 export const refreshTokens = pgTable("refresh_tokens", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id")
@@ -185,6 +202,8 @@ export const tickets = pgTable("tickets", {
   priority: text("priority").notNull().default("medium"),
   assigneeId: uuid("assignee_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  firstRespondedAt: timestamp("first_responded_at", { withTimezone: true }),
+  slaBreached: boolean("sla_breached").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })
@@ -199,6 +218,39 @@ export const ticketCategories = pgTable("ticket_categories", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })
+
+export const ticketComments = pgTable(
+  "ticket_comments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ticketId: uuid("ticket_id")
+      .notNull()
+      .references(() => tickets.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("ticket_comments_ticket_idx").on(table.ticketId, table.createdAt)]
+)
+
+export const ticketAttachments = pgTable(
+  "ticket_attachments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ticketId: uuid("ticket_id")
+      .notNull()
+      .references(() => tickets.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    fileUrl: text("file_url").notNull(),
+    mimeType: text("mime_type"),
+    sizeBytes: integer("size_bytes"),
+    uploadedBy: uuid("uploaded_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("ticket_attachments_ticket_idx").on(table.ticketId, table.createdAt)]
+)
 
 export const events = pgTable("events", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -236,6 +288,27 @@ export const taskStatusEnum = pgEnum("task_status", [
 
 export const taskPriorityEnum = pgEnum("task_priority", ["low", "medium", "high", "critical"])
 
+export const taskProjects = pgTable(
+  "task_projects",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    description: text("description"),
+    ownerId: uuid("owner_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+    departmentId: uuid("department_id").references((): AnyPgColumn => departments.id, {
+      onDelete: "set null",
+    }),
+    status: text("status").notNull().default("active"),
+    color: text("color"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("task_projects_owner_idx").on(table.ownerId),
+    index("task_projects_department_idx").on(table.departmentId),
+  ]
+)
+
 export const tasks = pgTable(
   "tasks",
   {
@@ -251,6 +324,9 @@ export const tasks = pgTable(
     departmentId: uuid("department_id").references((): AnyPgColumn => departments.id, {
       onDelete: "set null",
     }),
+    projectId: uuid("project_id").references((): AnyPgColumn => taskProjects.id, {
+      onDelete: "set null",
+    }),
     dueDate: date("due_date"),
     parentTaskId: uuid("parent_task_id").references((): AnyPgColumn => tasks.id, {
       onDelete: "cascade",
@@ -259,6 +335,7 @@ export const tasks = pgTable(
     sourceMessageId: uuid("source_message_id"),
     sourceChannelId: uuid("source_channel_id"),
     isImportant: boolean("is_important").notNull().default(false),
+    isArchived: boolean("is_archived").notNull().default(false),
     completionResult: text("completion_result"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -267,7 +344,38 @@ export const tasks = pgTable(
   (table) => [
     index("tasks_assignee_status_idx").on(table.assigneeId, table.status),
     index("tasks_parent_task_id_idx").on(table.parentTaskId),
+    index("tasks_project_id_idx").on(table.projectId),
   ]
+)
+
+export const taskTemplates = pgTable(
+  "task_templates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    priority: text("priority"),
+    checklistJson: jsonb("checklist_json"),
+    creatorId: uuid("creator_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("task_templates_creator_idx").on(table.creatorId)]
+)
+
+export const automationRules = pgTable(
+  "automation_rules",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    trigger: text("trigger").notNull(),
+    action: text("action").notNull(),
+    config: jsonb("config"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdBy: uuid("created_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("automation_rules_created_by_idx").on(table.createdBy)]
 )
 
 export const taskParticipants = pgTable(
@@ -372,6 +480,7 @@ export const chatChannelTypeEnum = pgEnum("chat_channel_type", [
   "group",
   "department",
   "task",
+  "channel",
 ])
 
 export const chatChannels = pgTable(
@@ -442,6 +551,92 @@ export const chatMessages = pgTable(
   (table) => [index("chat_messages_channel_created_idx").on(table.channelId, table.createdAt)]
 )
 
+export const chatReactions = pgTable(
+  "chat_reactions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    emoji: text("emoji").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("chat_reactions_message_user_emoji_idx").on(table.messageId, table.userId, table.emoji),
+    index("chat_reactions_message_idx").on(table.messageId),
+  ]
+)
+
+export const chatAttachments = pgTable(
+  "chat_attachments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    fileUrl: text("file_url").notNull(),
+    mimeType: text("mime_type"),
+    sizeBytes: integer("size_bytes"),
+    uploadedBy: uuid("uploaded_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("chat_attachments_message_idx").on(table.messageId, table.createdAt)]
+)
+
+export const chatFolders = pgTable(
+  "chat_folders",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("chat_folders_user_idx").on(table.userId, table.sortOrder)]
+)
+
+export const chatFolderChannels = pgTable(
+  "chat_folder_channels",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    folderId: uuid("folder_id")
+      .notNull()
+      .references(() => chatFolders.id, { onDelete: "cascade" }),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => chatChannels.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    unique("chat_folder_channels_folder_channel_idx").on(table.folderId, table.channelId),
+    index("chat_folder_channels_channel_idx").on(table.channelId),
+  ]
+)
+
+export const chatPinnedMessages = pgTable(
+  "chat_pinned_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => chatChannels.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: "cascade" }),
+    pinnedBy: uuid("pinned_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("chat_pinned_messages_channel_message_idx").on(table.channelId, table.messageId),
+    index("chat_pinned_messages_channel_idx").on(table.channelId, table.createdAt),
+  ]
+)
+
 export const notifications = pgTable(
   "notifications",
   {
@@ -476,4 +671,178 @@ export const taskReminders = pgTable(
     unique("task_reminders_unique_idx").on(table.taskId, table.userId, table.kind),
     index("task_reminders_task_idx").on(table.taskId),
   ]
+)
+
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  emailEnabled: boolean("email_enabled").notNull().default(true),
+  inAppEnabled: boolean("in_app_enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const companies = pgTable("companies", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  inn: text("inn"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const dealStages = pgTable(
+  "deal_stages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    color: text("color"),
+  },
+  (table) => [index("deal_stages_sort_order_idx").on(table.sortOrder)]
+)
+
+export const deals = pgTable(
+  "deals",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    title: text("title").notNull(),
+    companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
+    stageId: uuid("stage_id").references(() => dealStages.id, { onDelete: "set null" }),
+    amount: integer("amount"),
+    ownerId: uuid("owner_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+    source: text("source"),
+    tags: jsonb("tags"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("deals_company_idx").on(table.companyId),
+    index("deals_stage_idx").on(table.stageId),
+    index("deals_owner_idx").on(table.ownerId),
+  ]
+)
+
+export const dealActivities = pgTable(
+  "deal_activities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    dealId: uuid("deal_id")
+      .notNull()
+      .references(() => deals.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("deal_activities_deal_idx").on(table.dealId, table.createdAt)]
+)
+
+export const dashboardWidgets = pgTable(
+  "dashboard_widgets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    widgetType: text("widget_type").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    config: jsonb("config"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("dashboard_widgets_user_idx").on(table.userId, table.sortOrder)]
+)
+
+export const chatPolls = pgTable(
+  "chat_polls",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: "cascade" }),
+    question: text("question").notNull(),
+    allowMultiple: boolean("allow_multiple").notNull().default(false),
+    closesAt: timestamp("closes_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("chat_polls_message_idx").on(table.messageId)]
+)
+
+export const chatPollOptions = pgTable("chat_poll_options", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  pollId: uuid("poll_id")
+    .notNull()
+    .references(() => chatPolls.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+})
+
+export const chatPollVotes = pgTable(
+  "chat_poll_votes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    pollId: uuid("poll_id")
+      .notNull()
+      .references(() => chatPolls.id, { onDelete: "cascade" }),
+    optionId: uuid("option_id")
+      .notNull()
+      .references(() => chatPollOptions.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("chat_poll_votes_poll_option_user_idx").on(table.pollId, table.optionId, table.userId),
+    index("chat_poll_votes_poll_idx").on(table.pollId),
+  ]
+)
+
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("push_subscriptions_user_idx").on(table.userId)]
+)
+
+export const ticketSlaPolicies = pgTable(
+  "ticket_sla_policies",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    categoryId: uuid("category_id").references(() => ticketCategories.id, { onDelete: "cascade" }),
+    firstResponseMinutes: integer("first_response_minutes").notNull().default(60),
+    resolveMinutes: integer("resolve_minutes").notNull().default(1440),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("ticket_sla_policies_category_unique_idx")
+      .on(table.categoryId)
+      .where(sql`${table.categoryId} is not null`),
+  ]
+)
+
+export const documentVersions = pgTable(
+  "document_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    versionLabel: text("version_label").notNull(),
+    fileUrl: text("file_url"),
+    changeNote: text("change_note"),
+    uploadedBy: uuid("uploaded_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("document_versions_document_idx").on(table.documentId, table.createdAt)]
 )

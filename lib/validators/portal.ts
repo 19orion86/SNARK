@@ -666,7 +666,13 @@ export const ticketCategoriesResponseSchema = z.object({
 })
 
 export const ticketCategoryEnum = ticketCategorySlugSchema
-export const ticketStatusEnum = z.enum(["new", "in_progress", "resolved", "closed"])
+export const ticketStatusEnum = z.enum([
+  "new",
+  "in_progress",
+  "waiting_response",
+  "resolved",
+  "closed",
+])
 export const ticketPriorityEnum = z.enum(["low", "medium", "high", "critical"])
 
 export const ticketsListQuerySchema = z.object({
@@ -703,8 +709,54 @@ export const ticketSchema = z.object({
   assigneeId: z.string().uuid().nullable(),
   assigneeName: z.string().nullable(),
   resolvedAt: z.string().nullable(),
+  firstRespondedAt: z.string().nullable().optional(),
+  slaBreached: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
+})
+
+export const ticketSlaPolicySchema = z.object({
+  id: z.string().uuid(),
+  categoryId: z.string().uuid().nullable(),
+  firstResponseMinutes: z.number().int().positive(),
+  resolveMinutes: z.number().int().positive(),
+  isActive: z.boolean(),
+  createdAt: z.string(),
+})
+
+export const ticketSlaUpsertSchema = z.object({
+  categoryId: z.string().uuid().nullable().optional(),
+  firstResponseMinutes: z.number().int().positive().max(10080),
+  resolveMinutes: z.number().int().positive().max(525600),
+  isActive: z.boolean().optional().default(true),
+})
+
+export const documentVersionSchema = z.object({
+  id: z.string().uuid(),
+  documentId: z.string().uuid(),
+  versionLabel: z.string(),
+  fileUrl: z.string().nullable(),
+  changeNote: z.string().nullable(),
+  uploadedBy: z.string().uuid().nullable(),
+  createdAt: z.string(),
+})
+
+export const documentVersionCreateSchema = z.object({
+  versionLabel: z.string().trim().min(1).max(50),
+  changeNote: z.string().trim().max(2000).optional().nullable(),
+  fileUrl: z.string().trim().max(2000).optional().nullable(),
+})
+
+export const pushSubscribeSchema = z.object({
+  endpoint: z.string().url(),
+  keys: z.object({
+    p256dh: z.string().min(1),
+    auth: z.string().min(1),
+  }),
+})
+
+export const pushUnsubscribeSchema = z.object({
+  endpoint: z.string().url(),
 })
 
 export const ticketsListResponseSchema = z.object({
@@ -924,8 +976,11 @@ export const tasksListQuerySchema = z.object({
   assigneeId: z.string().uuid().optional(),
   creatorId: z.string().uuid().optional(),
   departmentId: z.string().uuid().optional(),
+  projectId: z.string().uuid().optional(),
   priority: taskPriorityEnum.optional(),
-  scope: z.enum(["all", "mine", "created", "watching", "overdue", "important"]).optional(),
+  scope: z
+    .enum(["all", "mine", "created", "watching", "co_assignee", "overdue", "important"])
+    .optional(),
   overdue: z
     .union([z.literal("true"), z.literal("false"), z.boolean()])
     .optional()
@@ -946,8 +1001,10 @@ export const taskCreateSchema = z.object({
   priority: taskPriorityEnum.optional(),
   assigneeId: z.string().uuid().optional().nullable(),
   departmentId: z.string().uuid().optional().nullable(),
+  projectId: z.string().uuid().optional().nullable(),
   dueDate: z.string().optional().nullable(),
   watcherIds: z.array(z.string().uuid()).optional(),
+  coAssigneeIds: z.array(z.string().uuid()).optional(),
   parentTaskId: z.string().uuid().optional().nullable(),
   sourceMessageId: z.string().uuid().optional().nullable(),
   sourceChannelId: z.string().uuid().optional().nullable(),
@@ -960,9 +1017,14 @@ export const taskUpdateSchema = z.object({
   priority: taskPriorityEnum.optional(),
   assigneeId: z.string().uuid().optional().nullable(),
   departmentId: z.string().uuid().optional().nullable(),
+  projectId: z.string().uuid().optional().nullable(),
   dueDate: z.string().optional().nullable(),
   isImportant: z.boolean().optional(),
   completionResult: z.string().trim().max(10000).optional().nullable(),
+})
+
+export const ticketCommentCreateSchema = z.object({
+  body: z.string().trim().min(1).max(5000),
 })
 
 export const taskCompleteSchema = z.object({
@@ -986,6 +1048,7 @@ export const portalTaskSchema = z.object({
   creatorName: z.string(),
   departmentId: z.string().uuid().nullable(),
   departmentName: z.string().nullable(),
+  projectId: z.string().uuid().nullable().optional(),
   dueDate: z.string().nullable(),
   parentTaskId: z.string().uuid().nullable().optional(),
   protocolActionItemId: z.number().int().nullable(),
@@ -1116,16 +1179,46 @@ export const chatMessageCreateSchema = z.object({
   mentionIds: z.array(z.string().uuid()).max(50).optional().default([]),
 })
 
+export const chatPollOptionSummarySchema = z.object({
+  id: z.string().uuid(),
+  label: z.string(),
+  sortOrder: z.number().int(),
+  votesCount: z.number().int().min(0),
+  votedByMe: z.boolean(),
+})
+
+export const chatPollSummarySchema = z.object({
+  id: z.string().uuid(),
+  question: z.string(),
+  allowMultiple: z.boolean(),
+  closesAt: z.string().nullable(),
+  totalVotes: z.number().int().min(0),
+  options: z.array(chatPollOptionSummarySchema),
+  myOptionIds: z.array(z.string().uuid()),
+})
+
+export const chatPollCreateSchema = z.object({
+  question: z.string().trim().min(1).max(500),
+  options: z.array(z.string().trim().min(1).max(200)).min(2).max(20),
+  allowMultiple: z.boolean().optional().default(false),
+})
+
+export const chatPollVoteSchema = z.object({
+  optionId: z.string().uuid(),
+})
+
 export const chatMessageSchema = z.object({
   id: z.string().uuid(),
   channelId: z.string().uuid(),
   authorId: z.string().uuid(),
   authorName: z.string(),
   body: z.string(),
-  messageType: z.enum(["user", "system", "task_created"]).default("user"),
+  messageType: z.enum(["user", "system", "task_created", "poll", "voice"]).default("user"),
   replyToId: z.string().uuid().nullable().optional(),
   replyToBody: z.string().nullable().optional(),
   linkedTaskId: z.string().uuid().nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+  poll: chatPollSummarySchema.nullable().optional(),
   createdAt: z.string(),
   editedAt: z.string().nullable(),
 })

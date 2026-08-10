@@ -141,6 +141,20 @@
       "when": 1784300000000,
       "tag": "0019_department_channels",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784400000000,
+      "tag": "0020_tz_full_extensions",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784500000000,
+      "tag": "0021_tz_iteration6",
+      "breakpoints": true
     }
   ]
 }
