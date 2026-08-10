@@ -8,6 +8,8 @@ export interface RealtimeBus {
   subscribe(handler: (event: RealtimeEvent) => void): () => void
 }
 
+const CHANNEL = "snark:realtime"
+
 class InProcessRealtimeBus implements RealtimeBus {
   private readonly emitter = new EventEmitter()
 
@@ -27,11 +29,65 @@ class InProcessRealtimeBus implements RealtimeBus {
   }
 }
 
+/**
+ * Redis Pub/Sub поверх локального EventEmitter.
+ * Local emit — для текущего процесса; publish в Redis — для остальных инстансов.
+ */
+class RedisRealtimeBus implements RealtimeBus {
+  private readonly local = new InProcessRealtimeBus()
+  private readonly pub: import("ioredis").default
+  private readonly sub: import("ioredis").default
+  private started = false
+
+  constructor(redisUrl: string) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Redis = require("ioredis") as typeof import("ioredis").default
+    this.pub = new Redis(redisUrl, { maxRetriesPerRequest: 2, lazyConnect: true })
+    this.sub = new Redis(redisUrl, { maxRetriesPerRequest: 2, lazyConnect: true })
+    void this.start()
+  }
+
+  private async start(): Promise<void> {
+    if (this.started) return
+    this.started = true
+    try {
+      await this.pub.connect()
+      await this.sub.connect()
+      await this.sub.subscribe(CHANNEL)
+      this.sub.on("message", (_channel: string, raw: string) => {
+        try {
+          const event = JSON.parse(raw) as RealtimeEvent & { __origin?: string }
+          if (event.__origin === process.pid.toString()) return
+          const { __origin: _, ...clean } = event as RealtimeEvent & { __origin?: string }
+          this.local.publish(clean as RealtimeEvent)
+        } catch {
+          // ignore malformed payloads
+        }
+      })
+    } catch (error) {
+      console.error("[realtime] Redis bus failed, falling back to in-process only", error)
+    }
+  }
+
+  publish(event: RealtimeEvent): void {
+    this.local.publish(event)
+    const payload = JSON.stringify({ ...event, __origin: process.pid.toString() })
+    void this.pub.publish(CHANNEL, payload).catch(() => {})
+  }
+
+  subscribe(handler: (event: RealtimeEvent) => void): () => void {
+    return this.local.subscribe(handler)
+  }
+}
+
 const globalForRealtime = globalThis as unknown as { __snarkRealtimeBus?: RealtimeBus }
 
 export function getRealtimeBus(): RealtimeBus {
   if (!globalForRealtime.__snarkRealtimeBus) {
-    globalForRealtime.__snarkRealtimeBus = new InProcessRealtimeBus()
+    const redisUrl = process.env.REDIS_URL?.trim()
+    globalForRealtime.__snarkRealtimeBus = redisUrl
+      ? new RedisRealtimeBus(redisUrl)
+      : new InProcessRealtimeBus()
   }
   return globalForRealtime.__snarkRealtimeBus
 }

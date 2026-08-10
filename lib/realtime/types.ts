@@ -25,6 +25,20 @@ export type RealtimeEvent =
       memberIds: string[]
     }
   | {
+      type: "typing.start"
+      channelId: string
+      userId: string
+      userName?: string
+      memberIds: string[]
+    }
+  | {
+      type: "read.updated"
+      channelId: string
+      userId: string
+      lastReadAt: string
+      memberIds: string[]
+    }
+  | {
       type: "notification.new"
       userId: string
       notification: {

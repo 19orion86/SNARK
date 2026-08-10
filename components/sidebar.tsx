@@ -16,6 +16,7 @@ import {
   MessageSquare,
   CheckSquare,
   Mic,
+  Briefcase,
 } from 'lucide-react'
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -33,6 +34,7 @@ interface SidebarProps {
 const secondaryItems = [
   { id: 'about', label: 'О компании', icon: Building2, href: '/about' },
   { id: 'calendar', label: 'Календарь', icon: Calendar, href: '/calendar' },
+  { id: 'vacations-calendar', label: 'Отпуска', icon: Calendar, href: '/vacations/calendar' },
   { id: 'library', label: 'Библиотека', icon: BookOpen, href: '/knowledge' },
   { id: 'support', label: 'Поддержка', icon: HelpCircle, href: '/support' },
 ]
@@ -51,6 +53,7 @@ const iconMap = {
   MessageSquare,
   CheckSquare,
   Mic,
+  Briefcase,
 } as const
 
 function getIcon(iconName: SidebarItem["icon"]) {

@@ -3,6 +3,7 @@ import type { TicketPriority, TicketStatus } from "@/types/portal"
 export const TICKET_STATUS_LABEL: Record<TicketStatus, { label: string; classes: string }> = {
   new: { label: "Новая", classes: "bg-primary/15 text-primary" },
   in_progress: { label: "В работе", classes: "bg-accent/15 text-accent-foreground" },
+  waiting_response: { label: "Ожидает ответа", classes: "bg-amber-500/15 text-amber-800" },
   resolved: { label: "Решена", classes: "bg-emerald-500/15 text-emerald-700" },
   closed: { label: "Закрыта", classes: "bg-muted text-muted-foreground" },
 }

@@ -278,7 +278,11 @@ export function mockSendMessage(
   channelId: string,
   userId: string,
   body: string,
-  options?: { replyToId?: string | null; messageType?: ChatMessageType }
+  options?: {
+    replyToId?: string | null
+    messageType?: ChatMessageType
+    metadata?: Record<string, unknown> | null
+  }
 ): ChatMessage {
   if (!isMember(channelId, userId)) {
     throw new Error("Нет доступа к каналу")
@@ -295,6 +299,7 @@ export function mockSendMessage(
     replyToId: options?.replyToId ?? null,
     replyToBody: null,
     linkedTaskId: null,
+    metadata: options?.metadata ?? null,
     createdAt: new Date().toISOString(),
     editedAt: null,
   }

@@ -1,0 +1,24 @@
+{
+  "name": "SNARK",
+  "short_name": "SNARK",
+  "description": "Корпоративный портал СНАРК",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#16223b",
+  "theme_color": "#16223b",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/snark-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

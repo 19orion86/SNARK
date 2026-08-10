@@ -936,6 +936,7 @@ export const mockPortalRepository: PortalRepository = {
         href: "/protocols",
       },
       { id: "tasks", label: "Задачи", icon: "CheckSquare", description: "Таск-менеджер", href: "/tasks" },
+      { id: "crm", label: "CRM", icon: "Briefcase", description: "Сделки и воронка", href: "/crm" },
       { id: "chat", label: "Чат", icon: "MessageSquare", description: "Внутренняя переписка", href: "/chat" },
       { id: "profile", label: "Мой профиль", icon: "User", description: "Личный кабинет", href: "/profile" },
       {
@@ -1034,7 +1035,7 @@ export const mockPortalRepository: PortalRepository = {
     await delay(10)
     const ticket = mockTickets.find((entry) => entry.id === id) ?? null
     if (!ticket) return { item: null }
-    if (requester.role !== "admin" && ticket.authorId !== requester.userId) {
+    if (requester.role !== "admin" && requester.role !== "hr_manager" && ticket.authorId !== requester.userId) {
       return { item: null }
     }
     return { item: { ...ticket } }

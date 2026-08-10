@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   Table,
   TableBody,
   TableCell,
@@ -17,7 +24,7 @@ import {
   TICKET_PRIORITY_LABEL,
   TICKET_STATUS_LABEL,
 } from "@/lib/portal-data/tickets-ui"
-import type { TicketCategoriesResponse, TicketsListResponse } from "@/types/portal"
+import type { TicketCategoriesResponse, TicketStatus, TicketsListResponse } from "@/types/portal"
 
 interface AdminTicketsTableProps {
   initial: TicketsListResponse
@@ -69,6 +76,28 @@ export function AdminTicketsTable({ initial, categories, currentAdminId }: Admin
     }
   }
 
+  const onStatusChange = async (ticketId: string, status: TicketStatus) => {
+    setError(null)
+    setActiveId(ticketId)
+    try {
+      const response = await fetch(`/api/admin/tickets/${ticketId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status }),
+      })
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string }
+        setError(body.error ?? "Не удалось обновить статус")
+        return
+      }
+      startTransition(() => router.refresh())
+    } catch {
+      setError("Сетевая ошибка при обновлении статуса")
+    } finally {
+      setActiveId(null)
+    }
+  }
+
   const tickets = initial.items
 
   return (
@@ -115,11 +144,18 @@ export function AdminTicketsTable({ initial, categories, currentAdminId }: Admin
                     </TableCell>
                     <TableCell>{ticketCategoryLabel(ticket.category, categories)}</TableCell>
                     <TableCell>
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusMeta.classes}`}
-                      >
-                        {statusMeta.label}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusMeta?.classes ?? "bg-muted"}`}
+                        >
+                          {statusMeta?.label ?? ticket.status}
+                        </span>
+                        {ticket.slaBreached ? (
+                          <span className="inline-flex items-center rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-medium text-destructive">
+                            SLA
+                          </span>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell>{TICKET_PRIORITY_LABEL[ticket.priority]}</TableCell>
                     <TableCell className="text-muted-foreground">
@@ -129,17 +165,33 @@ export function AdminTicketsTable({ initial, categories, currentAdminId }: Admin
                       {formatDate(ticket.createdAt)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {ticket.status === "new" ? (
-                        <Button
-                          size="sm"
-                          onClick={() => onTakeToWork(ticket.id)}
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <Select
+                          value={ticket.status}
+                          onValueChange={(value) => void onStatusChange(ticket.id, value as TicketStatus)}
                           disabled={isLoading}
                         >
-                          {isLoading ? "Берём..." : "Взять в работу"}
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
+                          <SelectTrigger className="h-8 w-[160px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(Object.keys(TICKET_STATUS_LABEL) as TicketStatus[]).map((status) => (
+                              <SelectItem key={status} value={status}>
+                                {TICKET_STATUS_LABEL[status].label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {ticket.status === "new" ? (
+                          <Button
+                            size="sm"
+                            onClick={() => onTakeToWork(ticket.id)}
+                            disabled={isLoading}
+                          >
+                            {isLoading ? "Берём..." : "Взять в работу"}
+                          </Button>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 )

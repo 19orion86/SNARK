@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import { Building2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -106,13 +107,20 @@ export function VacationTab({ presenceLabel }: VacationTabProps) {
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold text-card-foreground">История отпусков</h3>
-        <Button
-          type="button"
-          className="bg-[#16223b] hover:bg-[#16223b]/90"
-          onClick={() => setSheetOpen(true)}
-        >
-          Подать заявку
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/vacations/calendar">
+            <Button type="button" variant="outline">
+              Календарь отпусков
+            </Button>
+          </Link>
+          <Button
+            type="button"
+            className="bg-[#16223b] hover:bg-[#16223b]/90"
+            onClick={() => setSheetOpen(true)}
+          >
+            Подать заявку
+          </Button>
+        </div>
       </div>
 
       <Card className="p-4">

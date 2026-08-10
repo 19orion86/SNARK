@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter, Exo_2 } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { AuthProvider } from '@/hooks/use-auth'
+import { RegisterServiceWorker } from '@/components/pwa/register-sw'
 import './globals.css'
 
 const inter = Inter({
@@ -23,6 +24,7 @@ export const metadata: Metadata = {
   icons: {
     icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
   },
+  manifest: '/manifest.webmanifest',
 }
 
 export default function RootLayout({
@@ -33,7 +35,10 @@ export default function RootLayout({
   return (
     <html lang="ru" className="bg-background">
       <body className={`${inter.variable} ${exo2.variable} font-sans antialiased`}>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <RegisterServiceWorker />
+          {children}
+        </AuthProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
