@@ -22,10 +22,11 @@ from urllib.parse import quote
 import structlog
 from celery.result import AsyncResult
 from docx import Document
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.auth.internal_token import require_internal_token
 from src.core.celery_app import celery_app
 from src.core.config import settings
 from src.core.database import get_async_session
@@ -475,23 +476,14 @@ async def retry_protocol_processing(
 async def update_action_item_status(
     item_id: int,
     new_status: ActionItemStatusEnum,
-    request: Request,
     session: AsyncSession = Depends(get_async_session),
+    _: None = Depends(require_internal_token),
 ) -> dict:
     """Обновить статус поручения (action item).
 
-    Если задан INTERNAL_TOKEN — ожидается заголовок X-Internal-Token
-    (вызов с портала при завершении задачи).
+    Внутренний маршрут: вызывается порталом при завершении задачи и требует
+    заголовок X-Internal-Token. Без настроенного INTERNAL_TOKEN отвечает 401.
     """
-    expected = (settings.internal_token or "").strip()
-    if expected:
-        provided = (request.headers.get("X-Internal-Token") or "").strip()
-        if provided != expected:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Неверный внутренний токен",
-            )
-
     repo = ProtocolRepository(session)
     item = await repo.update_action_item_status(
         item_id=item_id,
