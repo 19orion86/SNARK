@@ -145,9 +145,10 @@ export async function listMyChannels(userId: string): Promise<ChatChannelsListRe
 
   const channelIds = channelRows.map((row) => row.id)
 
-  // 2) Последние сообщения (DISTINCT ON)
+  // 2) Последние сообщения: по одному index scan на канал
+  //    (chat_messages_channel_created_idx), а не сортировка всех сообщений каналов.
   const lastMsgResult = await db.execute(sql`
-    SELECT DISTINCT ON (m.channel_id)
+    SELECT
       m.id,
       m.channel_id,
       m.author_id,
@@ -159,13 +160,16 @@ export async function listMyChannels(userId: string): Promise<ChatChannelsListRe
       m.metadata,
       m.created_at,
       m.edited_at
-    FROM chat_messages m
+    FROM chat_channel_members cm
+    CROSS JOIN LATERAL (
+      SELECT *
+      FROM chat_messages last_msg
+      WHERE last_msg.channel_id = cm.channel_id
+      ORDER BY last_msg.created_at DESC
+      LIMIT 1
+    ) m
     INNER JOIN users u ON u.id = m.author_id
-    WHERE m.channel_id IN (${sql.join(
-      channelIds.map((id) => sql`${id}::uuid`),
-      sql`, `
-    )})
-    ORDER BY m.channel_id, m.created_at DESC
+    WHERE cm.user_id = ${userId}::uuid
   `)
 
   const lastMsgList = rowsOf<{
