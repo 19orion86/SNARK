@@ -1,3 +1,10 @@
+> **УСТАРЕЛО (помечено 03.10.2026).** Отчёт описывает первый локальный запуск прототипа на mock-данных
+> и не соответствует текущей архитектуре: сейчас портал работает на Postgres (Drizzle, миграции 0000–0022),
+> JWT-сессиях, с сервисом протоколов и E2E на Playwright.
+> Актуальные источники: [`README.md`](../README.md), [`orchestrator_doc/LOG.md`](../orchestrator_doc/LOG.md),
+> [`BUGS.md`](../BUGS.md), [`orchestrator_doc/archive/PERF-BASELINE.md`](../orchestrator_doc/archive/PERF-BASELINE.md).
+> Файл оставлен как исторический, пользоваться им для запуска нельзя.
+
 # Local Test Launch Report
 
 ## 1) Launch Environment

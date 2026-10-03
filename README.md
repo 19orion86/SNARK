@@ -168,7 +168,48 @@ pnpm typecheck
 pnpm test
 ```
 
-ACL задач / членство канала с живым Postgres — отдельный follow-up (нужен тестовый Postgres). Smoke e2e задача→чат — `tests/auth` + ручная проверка.
+`pnpm test` включает ACL-сетку `tests/acl` (аноним / employee / hr_manager / admin × все API) —
+БД для неё не нужна.
+
+### E2E на живом Postgres (Playwright)
+
+```bash
+pnpm exec playwright install chromium   # один раз
+pnpm db:migrate && pnpm init:users
+pnpm build
+pnpm test:e2e                           # сам поднимет next start на :3100
+```
+
+| Сьют | Что проверяет |
+|------|---------------|
+| `e2e/core-flow.spec.ts` | login → dashboard → задача → чат → заявка → отпуск |
+| `e2e/page-walk.spec.ts` | все страницы под тремя ролями: статус, ошибки JS, 5xx, LCP |
+| `e2e/stand-verification.spec.ts` | пункты TZ v2 на реальной БД: проекты, опросы, поиск, комментарии к заявкам, согласование отпуска |
+
+Если сервер уже запущен: `E2E_BASE_URL=http://127.0.0.1:3100 pnpm test:e2e`.
+
+### Аудит и замеры
+
+```bash
+python scripts/audit-route-auth.py      # у каждого API-обработчика есть проверка доступа
+python scripts/audit-live.py --runs 8   # статусы и TTFB по ролям (на production-сборке)
+python scripts/page-walk-summary.py     # LCP и замечания после pnpm test:e2e
+python scripts/pg-log-top.py <pg.log>   # топ SQL по логу Postgres
+psql "$DATABASE_URL" -f scripts/seed-perf.sql   # нагрузочные данные (только dev/стенд)
+```
+
+Реестр находок — [`BUGS.md`](BUGS.md), baseline — [`orchestrator_doc/archive/PERF-BASELINE.md`](orchestrator_doc/archive/PERF-BASELINE.md).
+
+### Без Docker
+
+Если Docker недоступен, Postgres 16 с pgvector поднимается из pip-пакета `pgserver`:
+
+```bash
+pip install pgserver
+POSTGRES_PASSWORD=<пароль из DATABASE_URL> SNARK_PGPORT=5433 python scripts/dev-postgres.py start
+```
+
+MinIO и Redis при этом не запускаются: файловое хранилище работает как mock, realtime — in-process.
 
 ---
 

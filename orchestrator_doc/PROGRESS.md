@@ -3,7 +3,7 @@
 Горячий слой: ≤150 строк. Обновляется каждую сессию. Коммитится в `main` после сессии.
 Лог сессий → [`LOG.md`](LOG.md). Детальная карта → [`archive/STATE-2026-07.md`](archive/STATE-2026-07.md).
 
-Последнее обновление: 2026-07-15 (CI-ROOT verified)
+Последнее обновление: 2026-10-03 (доработка по итогам проверки 18.08, ветка `feature/portal-dorabotka`)
 
 ## Архитектура
 
@@ -14,7 +14,9 @@ CI: корневой [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (
 
 ## Текущая фаза
 
-**Процессные правки (CORR + CI-ROOT)** — hot-state, NSSM runbook, CI live. Остаётся SYNC-SERVER.
+**Доработка по плану 4 фаз** (безопасность → тесты → baseline → оптимизация). Код и документы — в ветке
+`feature/portal-dorabotka`, ждут ревью: [`BUGS.md`](../BUGS.md), [`archive/PERF-BASELINE.md`](archive/PERF-BASELINE.md),
+запись [2026-10-03-01] в [`LOG.md`](LOG.md). Гейты фаз 1–3 закрываются согласованием ревьюера.
 
 ## Сделано (итог)
 
@@ -25,14 +27,14 @@ MVP портала live: auth, 33 страницы, 74 API routes, tasks/chat/pr
 
 ## Следующее
 
-1. **SYNC-SERVER** (оператор): закоммитить/запушить серверные правки (README + NSSM/.bat) с `192.168.1.236` → `git pull` локально. **До этого — никаких DEP.**
-2. Пометить `docs/launch-report.md` устаревшим или обновить
-3. Сверить чекбоксы `docs/TZ_TASKS_CHAT_V2.md` с кодом
-4. Python unit/integration тесты (`services/protocols/src/tests/`)
-5. E2E с живым Postgres для ACL задач/чата
-6. `/booking` — реализация (сейчас заглушка)
-7. Service Desk v2: комментарии и вложения заявок
-8. `GET /api/dashboard` + настраиваемые виджеты
+1. Ревью ветки `feature/portal-dorabotka`; согласовать `BUGS.md` и цели `PERF-BASELINE.md` §6
+2. Решение по BUGS B-10: `X-Internal-Token` на всех маршрутах Python-сервиса
+3. Оптимизации 2–5 из baseline (пагинация админ-списков, индекс поиска по чату) — отдельными PR
+4. Закрыть P2 из `BUGS.md`
+5. **SYNC-SERVER** (оператор): серверные правки с `192.168.1.236` → git. **До этого — никаких DEP.**
+6. Прогнать миграции 0020–0022 на prod (ops)
+7. `/booking` — реализация (сейчас заглушка)
+8. Ассистент по базе знаний (RAG): [`docs/DESIGN_ASSISTANT_RAG.md`](../docs/DESIGN_ASSISTANT_RAG.md) — после гейта фазы 1
 9. Ответить на вопросы оператору в [`DEPLOY.md`](DEPLOY.md) §7
 
 ## Блокеры
@@ -40,10 +42,7 @@ MVP портала live: auth, 33 страницы, 74 API routes, tasks/chat/pr
 | Блокер | Основание |
 |--------|-----------|
 | **SYNC-SERVER не выполнен** | Серверные NSSM-правки не запушены с прода; DEPLOY/README локально опережают git |
-| Устаревшая документация | `launch-report.md` — state-routing era |
 | Python protocols — внешние зависимости | ffmpeg, HF_TOKEN, STT/LLM ключи |
-| Нет Python тестов | `def test_*` в protocols отсутствуют (CI pytest exit 5 — OK) |
-| Hybrid data layer | `portal-repository.drizzle.ts` делегирует часть в mock |
 
 ## Ожидает деплоя (Pending deploy)
 
