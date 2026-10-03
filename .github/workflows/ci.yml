@@ -28,6 +28,8 @@ jobs:
               - 'lib/**'
               - 'types/**'
               - 'tests/**'
+              - 'e2e/**'
+              - 'playwright.config.ts'
               - 'public/**'
               - 'scripts/**'
               - 'middleware.ts'
@@ -78,6 +80,86 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Route auth audit
+        run: python scripts/audit-route-auth.py
+
+  e2e:
+    needs: [changes, portal]
+    if: needs.changes.outputs.portal == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: portal_ci
+          POSTGRES_USER: portal_ci
+          POSTGRES_PASSWORD: portal_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U portal_ci -d portal_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://portal_ci:portal_ci_password@localhost:5432/portal_ci
+      USE_MOCK_DB: "false"
+      COOKIE_SECURE: "false"
+      JWT_ACCESS_SECRET: ci-only-access-secret-not-used-anywhere-else
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-not-used-anywhere-else
+      INTERNAL_TOKEN: ci-only-internal-token
+      DEV_ADMIN_EMAIL: admin@snark.ru
+      DEV_ADMIN_PASSWORD: ci-only-admin-password
+      DEV_HR_EMAIL: hr@snark.ru
+      DEV_HR_PASSWORD: ci-only-hr-password
+      DEV_EMPLOYEE_EMAIL: employee@snark.ru
+      DEV_EMPLOYEE_PASSWORD: ci-only-employee-password
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Migrate and seed
+        run: |
+          pnpm db:migrate
+          pnpm init:users
+
+      - name: Schema drift check
+        run: |
+          pnpm db:generate
+          git diff --exit-code -- lib/db/migrations
+
+      - name: Build
+        run: pnpm build
+
+      - name: E2E (Playwright, live Postgres)
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            e2e/.output
+
   protocols:
     needs: changes
     if: needs.changes.outputs.protocols == 'true'
@@ -91,8 +173,9 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dev tools
-        run: pip install ruff pytest pytest-asyncio
+      - name: Install test dependencies
+        working-directory: services/protocols
+        run: pip install -r requirements-test.txt
 
       - name: Ruff check
         working-directory: services/protocols
@@ -100,4 +183,4 @@ jobs:
 
       - name: Pytest
         working-directory: services/protocols
-        run: pytest || test $? -eq 5
+        run: pytest
