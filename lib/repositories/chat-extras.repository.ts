@@ -10,6 +10,7 @@ import {
   chatReactions,
   users,
 } from "@/lib/db/schema"
+import { rowsOf } from "@/lib/db/rows"
 import { isMockDb } from "@/lib/config/mode"
 import { formatFullName } from "@/lib/portal-data/format-name"
 import { getRealtimeBus } from "@/lib/realtime/bus"
@@ -279,21 +280,15 @@ export async function searchChatMessages(userId: string, query: string): Promise
     return hits.slice(0, 30)
   }
 
-  const memberChannels = await db
-    .select({ channelId: chatChannelMembers.channelId })
-    .from(chatChannelMembers)
-    .where(eq(chatChannelMembers.userId, userId))
-
-  const channelIds = memberChannels.map((row) => row.channelId)
-  if (channelIds.length === 0) return []
-
   // Prefer FTS when search_vector is populated; fall back to ILIKE.
   const ftsRows = await db.execute(sql`
     SELECT m.id AS "messageId", m.channel_id AS "channelId", m.body, m.created_at AS "createdAt",
            u.first_name AS "firstName", u.last_name AS "lastName"
     FROM chat_messages m
     INNER JOIN users u ON u.id = m.author_id
-    WHERE m.channel_id = ANY(${channelIds}::uuid[])
+    WHERE m.channel_id IN (
+        SELECT cm.channel_id FROM chat_channel_members cm WHERE cm.user_id = ${userId}
+      )
       AND (
         (m.search_vector IS NOT NULL AND m.search_vector @@ plainto_tsquery('simple', ${q}))
         OR m.body ILIKE ${"%" + q + "%"}
@@ -302,8 +297,7 @@ export async function searchChatMessages(userId: string, query: string): Promise
     LIMIT 30
   `)
 
-  const rows = (ftsRows as unknown as { rows?: Array<Record<string, unknown>> }).rows
-    ?? (Array.isArray(ftsRows) ? (ftsRows as Array<Record<string, unknown>>) : [])
+  const rows = rowsOf<Record<string, unknown>>(ftsRows)
 
   return rows.map((row) => ({
     messageId: String(row.messageId ?? row.messageid),
