@@ -20,7 +20,8 @@ Append-only. **Новые записи — строго сверху.** Дета
 - `492752f` — `requireAuth` на `GET /api/news*`, `/api/knowledge*` (P0); шрифты из `@fontsource`; удалён Vercel Analytics.
 - `b0a2bb6` — поиск по чату (500) и список чатов без последнего сообщения / непрочитанных на реальной БД.
 - `1bb72f1` — демо-сотрудники больше не получают пароль из репозитория.
-- `BUGS.md` — 21 находка: P0 1/1 закрыто, P1 9/8 закрыто, P2 11 открыто.
+- документы чужого отдела по прямой ссылке (IDOR в `/api/documents/preview/[id]` и `/versions`) — закрыто правилом `lib/documents/access.ts`.
+- `BUGS.md` — 22 находки: P0 1/1 закрыто, P1 10/9 закрыто, P2 11 открыто.
 - `docs/launch-report.md` помечен устаревшим; приложение А `docs/TZ_TASKS_CHAT_V2.md` синхронизировано со стендом.
 
 **Фаза 2 — тестовая сетка** (`f986bc5`)
@@ -55,8 +56,8 @@ $ pnpm lint
 > eslint .                          (без замечаний)
 
 $ pnpm test
- Test Files  15 passed (15)
-      Tests  272 passed (272)
+ Test Files  16 passed (16)
+      Tests  276 passed (276)
 
 $ pnpm db:migrate                   (чистая БД, миграции 0000–0022)
 [✓] migrations applied successfully!

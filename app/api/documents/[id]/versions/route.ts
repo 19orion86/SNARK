@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { requireAuth, requireRole, type AuthError } from "@/lib/auth/request-auth"
+import { getPortalRepositoryServer } from "@/lib/repositories/portal-repository.server"
+import { canViewDocument } from "@/lib/documents/access"
+import { loadDocumentRequester } from "@/lib/documents/requester"
 import { writeAuditLog } from "@/lib/audit/log"
 import {
   addDocumentVersion,
@@ -21,7 +24,7 @@ const idSchema = z.string().uuid()
 
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    requireAuth(request)
+    const auth = requireAuth(request)
     const { id } = await context.params
     const parsedId = idSchema.safeParse(id)
     if (!parsedId.success) {
@@ -32,7 +35,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     const exists = await assertDocumentExists(parsedId.data)
-    if (!exists) {
+    const document = exists
+      ? (await getPortalRepositoryServer().getDocumentById(parsedId.data)).item
+      : null
+    const allowed = document
+      ? canViewDocument(await loadDocumentRequester(auth), document)
+      : false
+    if (!exists || !allowed) {
       return NextResponse.json(
         apiErrorSchema.parse({ error: "Документ не найден", code: "NOT_FOUND" }),
         { status: 404 }
