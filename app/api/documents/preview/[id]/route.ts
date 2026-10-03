@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAuth, type AuthError } from "@/lib/auth/request-auth"
+import { canViewDocument } from "@/lib/documents/access"
+import { loadDocumentRequester } from "@/lib/documents/requester"
 import { getPortalRepositoryServer } from "@/lib/repositories/portal-repository.server"
 import { apiErrorSchema } from "@/lib/validators/portal"
 
@@ -9,10 +11,12 @@ interface RouteContext {
 
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    requireAuth(request)
+    const auth = requireAuth(request)
     const { id } = await context.params
     const data = await getPortalRepositoryServer().getDocumentById(id)
-    if (!data.item || !data.item.fileUrl) {
+    // Чужой документ неотличим от несуществующего: 404, а не 403.
+    const allowed = data.item ? canViewDocument(await loadDocumentRequester(auth), data.item) : false
+    if (!data.item || !data.item.fileUrl || !allowed) {
       const payload = apiErrorSchema.parse({
         error: "Документ не найден",
         code: "DOCUMENT_NOT_FOUND",
