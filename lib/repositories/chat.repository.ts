@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { db } from "@/lib/db/client"
 import { chatChannelMembers, chatChannels, chatMessages, departments, employeeProfiles, users } from "@/lib/db/schema"
+import { rowsOf } from "@/lib/db/rows"
 import { formatFullName } from "@/lib/portal-data/format-name"
 import type {
   ChatChannel,
@@ -167,9 +168,7 @@ export async function listMyChannels(userId: string): Promise<ChatChannelsListRe
     ORDER BY m.channel_id, m.created_at DESC
   `)
 
-  const lastMsgList = (
-    Array.isArray(lastMsgResult) ? lastMsgResult : []
-  ) as Array<{
+  const lastMsgList = rowsOf<{
     id: string
     channel_id: string
     author_id: string
@@ -181,7 +180,7 @@ export async function listMyChannels(userId: string): Promise<ChatChannelsListRe
     metadata: unknown
     created_at: Date | string
     edited_at: Date | string | null
-  }>
+  }>(lastMsgResult)
 
   const lastMap = new Map<string, (typeof lastMsgList)[number]>()
   for (const row of lastMsgList) {
@@ -225,9 +224,7 @@ export async function listMyChannels(userId: string): Promise<ChatChannelsListRe
     GROUP BY msg.channel_id
   `)
 
-  const unreadList = (
-    Array.isArray(unreadResult) ? unreadResult : []
-  ) as Array<{ channel_id: string; unread: number }>
+  const unreadList = rowsOf<{ channel_id: string; unread: number }>(unreadResult)
   const unreadMap = new Map<string, number>()
   for (const row of unreadList) {
     unreadMap.set(row.channel_id, Number(row.unread))

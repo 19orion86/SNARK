@@ -64,18 +64,18 @@ def make_opener() -> urllib.request.OpenerDirector:
     return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar), NoRedirect())
 
 
-def fetch(opener: urllib.request.OpenerDirector, url: str) -> tuple[int, float, int, str]:
-    """Возвращает (status, ttfb_ms, bytes, location)."""
+def fetch(opener: urllib.request.OpenerDirector, url: str) -> tuple[int, float, int, str, float]:
+    """Возвращает (status, ttfb_ms, bytes, location, total_ms)."""
     started = time.perf_counter()
     try:
         with opener.open(urllib.request.Request(url), timeout=60) as response:
             first = response.read(1)
             ttfb = (time.perf_counter() - started) * 1000
             body = first + response.read()
-            return response.status, ttfb, len(body), ""
+            return response.status, ttfb, len(body), "", (time.perf_counter() - started) * 1000
     except urllib.error.HTTPError as error:
         ttfb = (time.perf_counter() - started) * 1000
-        return error.code, ttfb, 0, error.headers.get("location", "")
+        return error.code, ttfb, 0, error.headers.get("location", ""), ttfb
 
 
 def login(base: str, email: str, password: str) -> urllib.request.OpenerDirector | None:
@@ -116,8 +116,10 @@ def main() -> None:
                     continue
                 samples = [fetch(opener, args.base + path) for _ in range(args.runs)]
                 ttfbs = sorted(sample[1] for sample in samples[1:] or samples)
+                totals = sorted(sample[4] for sample in samples[1:] or samples)
                 row[role] = {
                     "status": samples[-1][0],
+                    "total_ms_median": round(statistics.median(totals), 1),
                     "ttfb_ms_median": round(statistics.median(ttfbs), 1),
                     "ttfb_ms_max": round(ttfbs[-1], 1),
                     "bytes": samples[-1][2],
@@ -125,7 +127,7 @@ def main() -> None:
                 }
             results.append(row)
             cells = "  ".join(
-                f"{role[:5]}={row[role]['status']}/{row[role].get('ttfb_ms_median', '-')}"  # type: ignore[index, union-attr]
+                f"{role[:5]}={row[role]['status']}/{row[role].get('ttfb_ms_median', '-')}/{row[role].get('total_ms_median', '-')}"  # type: ignore[index, union-attr]
                 for role in sessions
             )
             print(f"{kind:4} {path:42} {cells}")
