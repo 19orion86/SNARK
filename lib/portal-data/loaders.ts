@@ -20,8 +20,6 @@ import type {
   NewsDetailResponse,
   NewsListQuery,
   NewsListResponse,
-  ProfileData,
-  SidebarItem,
   TicketsListResponse,
   TicketsQuery,
   TicketCategoriesResponse,
@@ -63,14 +61,6 @@ export async function loadDocumentsData(
   requester?: { role: string; userId?: string; departmentId?: string | null }
 ): Promise<DocumentsData> {
   return getPortalRepositoryServer().getDocumentsData(query, requester)
-}
-
-export async function loadProfileData(userId?: string): Promise<ProfileData> {
-  return getPortalRepositoryServer().getProfileData(userId)
-}
-
-export async function loadSidebarItems(): Promise<SidebarItem[]> {
-  return getPortalRepositoryServer().getSidebarItems()
 }
 
 export async function loadNewsData(query?: NewsListQuery): Promise<NewsListResponse> {

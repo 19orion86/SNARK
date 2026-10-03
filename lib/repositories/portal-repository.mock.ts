@@ -57,6 +57,7 @@ import type {
 } from "@/types/portal"
 import type { UserRole } from "@/types/auth"
 import { DEFAULT_TICKET_CATEGORIES } from "@/lib/portal-data/ticket-categories"
+import { getSidebarItems } from "@/lib/navigation/sidebar-items"
 
 function delay(ms = 120): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -922,32 +923,7 @@ export const mockPortalRepository: PortalRepository = {
 
   async getSidebarItems() {
     await delay(20)
-    return mapSidebarItems([
-      { id: "dashboard", label: "Главная", icon: "LayoutDashboard", description: "Дашборд", href: "/dashboard" },
-      { id: "news", label: "Новости", icon: "Newspaper", description: "Лента новостей", href: "/news" },
-      { id: "contacts", label: "Сотрудники", icon: "Users", description: "Справочник", href: "/contacts" },
-      { id: "structure", label: "Структура", icon: "Building2", description: "Оргструктура", href: "/structure" },
-      { id: "documents", label: "Документы", icon: "FileText", description: "Нормативная база", href: "/documents" },
-      {
-        id: "protocols",
-        label: "Протоколы",
-        icon: "Mic",
-        description: "Аудио → текст → протокол",
-        href: "/protocols",
-      },
-      { id: "tasks", label: "Задачи", icon: "CheckSquare", description: "Таск-менеджер", href: "/tasks" },
-      { id: "crm", label: "CRM", icon: "Briefcase", description: "Сделки и воронка", href: "/crm" },
-      { id: "chat", label: "Чат", icon: "MessageSquare", description: "Внутренняя переписка", href: "/chat" },
-      { id: "profile", label: "Мой профиль", icon: "User", description: "Личный кабинет", href: "/profile" },
-      {
-        id: "admin",
-        label: "Админ-панель",
-        icon: "ShieldCheck",
-        description: "Управление доступом",
-        href: "/admin",
-        roles: ["admin", "hr_manager"],
-      },
-    ])
+    return mapSidebarItems(getSidebarItems())
   },
 
   async getDepartmentsTree(): Promise<DepartmentsTreeResponse> {

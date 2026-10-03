@@ -1,29 +1,22 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { getPortalRepository } from "@/lib/repositories/portal-repository"
+import { getSidebarItems } from "@/lib/navigation/sidebar-items"
 import type { SidebarItem } from "@/types/portal"
 
 export function useSidebarNavigation() {
-  const [items, setItems] = useState<SidebarItem[]>([])
+  const [items, setItems] = useState<SidebarItem[]>(getSidebarItems)
 
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      const [result, statsRes] = await Promise.all([
-        getPortalRepository().getSidebarItems(),
-        fetch("/api/tasks/stats").catch(() => null),
-      ])
-      let overdueCount = 0
-      if (statsRes?.ok) {
-        const stats = (await statsRes.json()) as { overdueCount?: number }
-        overdueCount = Number(stats.overdueCount ?? 0)
-      }
-      if (mounted) {
-        setItems(
-          result.map((item) =>
-            item.id === "tasks" && overdueCount > 0 ? { ...item, badge: overdueCount } : item
-          )
+      const statsRes = await fetch("/api/tasks/stats").catch(() => null)
+      if (!statsRes?.ok) return
+      const stats = (await statsRes.json()) as { overdueCount?: number }
+      const overdueCount = Number(stats.overdueCount ?? 0)
+      if (mounted && overdueCount > 0) {
+        setItems((prev) =>
+          prev.map((item) => (item.id === "tasks" ? { ...item, badge: overdueCount } : item))
         )
       }
     })()
