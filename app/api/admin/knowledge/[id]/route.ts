@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { requestReindex } from "@/lib/assistant/client"
 import { requireRole, type AuthError } from "@/lib/auth/request-auth"
 import { writeAuditLog } from "@/lib/audit/log"
 import { getPortalRepositoryServer } from "@/lib/repositories/portal-repository.server"
@@ -49,6 +50,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       return NextResponse.json(payload, { status: 400 })
     }
     const item = await getPortalRepositoryServer().updateKnowledgeArticle(id, parsed.data)
+    await requestReindex("article", id)
     await writeAuditLog({
       userId: auth.userId,
       action: "admin:knowledge:update",
@@ -79,6 +81,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const auth = requireRole(request, ["admin", "hr_manager"])
     const { id } = await context.params
     await getPortalRepositoryServer().deleteKnowledgeArticle(id)
+    await requestReindex("article", id)
     await writeAuditLog({
       userId: auth.userId,
       action: "admin:knowledge:delete",

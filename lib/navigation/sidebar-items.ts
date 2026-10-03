@@ -18,6 +18,13 @@ export const SIDEBAR_ITEMS: readonly SidebarItem[] = [
     description: "Аудио → текст → протокол",
     href: "/protocols",
   },
+  {
+    id: "assistant",
+    label: "Ассистент",
+    icon: "Bot",
+    description: "Вопросы по регламентам",
+    href: "/assistant",
+  },
   { id: "tasks", label: "Задачи", icon: "CheckSquare", description: "Таск-менеджер", href: "/tasks" },
   { id: "crm", label: "CRM", icon: "Briefcase", description: "Сделки и воронка", href: "/crm" },
   { id: "chat", label: "Чат", icon: "MessageSquare", description: "Внутренняя переписка", href: "/chat" },

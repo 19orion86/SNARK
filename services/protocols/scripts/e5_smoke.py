@@ -47,7 +47,9 @@ def main() -> None:
 
     started = time.perf_counter()
     passages = embedder.encode([PASSAGE_PREFIX + text for text in PASSAGES])
-    print(f"{len(PASSAGES)} фрагмента: {time.perf_counter() - started:.2f} с, dim={len(passages[0])}")
+    print(
+        f"{len(PASSAGES)} фрагмента: {time.perf_counter() - started:.2f} с, dim={len(passages[0])}"
+    )
     for text in PASSAGES:
         print(f"  токенов: {embedder.count_tokens(PASSAGE_PREFIX + text)}")
 

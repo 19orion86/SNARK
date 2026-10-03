@@ -33,6 +33,10 @@ celery_app.conf.update(
     task_time_limit=900,
 )
 
+if settings.celery_task_always_eager:
+    celery_app.conf.task_always_eager = True
+    celery_app.conf.task_store_eager_result = False
+
 if sys.platform == "win32":
     # Prefork (billiard) на Windows часто падает с PermissionError на semlock.
     # Solo выполняет задачи в процессе воркера без дочерних pool-процессов.

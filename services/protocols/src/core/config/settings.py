@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0")
     celery_broker_url: str = Field(default="redis://localhost:6379/1")
     celery_result_backend: str = Field(default="redis://localhost:6379/2")
+    celery_task_always_eager: bool = Field(
+        default=False,
+        description="Выполнять задачи в процессе API без брокера (dev без Redis, E2E).",
+    )
 
     # --- Telegram ---
     telegram_bot_token: str = Field(default="")

@@ -45,7 +45,10 @@ class E5Embedder:
         self._tokenizer = self._model.tokenizer
         self.model_name = settings.embedding_model_name
 
-        dim = self._model.get_sentence_embedding_dimension()
+        get_dim = getattr(self._model, "get_embedding_dimension", None) or (
+            self._model.get_sentence_embedding_dimension
+        )
+        dim = get_dim()
         if dim != EMBEDDING_DIM:
             raise RuntimeError(
                 f"Модель {source} даёт {dim} измерений, а колонка rag.chunks.embedding — "

@@ -17,6 +17,7 @@ import {
   CheckSquare,
   Mic,
   Briefcase,
+  Bot,
 } from 'lucide-react'
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -54,6 +55,7 @@ const iconMap = {
   CheckSquare,
   Mic,
   Briefcase,
+  Bot,
 } as const
 
 function getIcon(iconName: SidebarItem["icon"]) {
