@@ -83,7 +83,7 @@ export function Dashboard({ data }: { data: DashboardData }) {
         
         <div className="relative z-10">
           <h1 className="text-2xl font-bold text-white md:text-3xl">
-            {greeting}, {data.welcomeName}!
+            {data.welcomeName ? `${greeting}, ${data.welcomeName}!` : `${greeting}!`}
           </h1>
           <p className="mt-2 text-white/70">{currentDate}</p>
           {data.birthdays.today.length > 0 && (

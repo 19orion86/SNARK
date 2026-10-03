@@ -25,7 +25,9 @@ import {
   type ParsedOrgStructure,
 } from "@/lib/import/one-c-staffing-parser"
 import { mapContactsData, mapDocumentsData, mapProfileData } from "@/lib/mappers/portal"
-import { mockPortalRepository } from "@/lib/repositories/portal-repository.mock"
+import { getDashboardQuickActions, getDashboardServiceCards } from "@/lib/dashboard/static-content"
+import { getSidebarItems } from "@/lib/navigation/sidebar-items"
+import { PROFILE_PLACEHOLDERS, getProfileTabs } from "@/lib/portal-data/profile-defaults"
 import { listMyDashboardTasks } from "@/lib/repositories/tasks.repository"
 import { syncAllDepartmentChannels } from "@/lib/repositories/department-channels"
 import type { PortalRepository } from "@/lib/repositories/portal-repository.types"
@@ -528,9 +530,7 @@ export const drizzlePortalRepository: PortalRepository = {
       .orderBy(desc(news.isPinned), desc(news.publishedAt), desc(news.createdAt))
       .limit(5)
 
-    const fallback = await mockPortalRepository.getDashboardData(userId)
-
-    let welcomeName = fallback.welcomeName
+    let welcomeName = ""
     if (userId) {
       const [user] = await db
         .select({ firstName: users.firstName })
@@ -542,11 +542,12 @@ export const drizzlePortalRepository: PortalRepository = {
     }
 
     return {
-      ...fallback,
       welcomeName,
+      quickActions: getDashboardQuickActions(),
+      serviceCards: getDashboardServiceCards(),
       birthdays,
       newEmployees,
-      myTasks: userId ? await listMyDashboardTasks(userId) : fallback.myTasks,
+      myTasks: userId ? await listMyDashboardTasks(userId) : [],
       recentNews: recentNewsRows.map((row) => ({
         id: row.id,
         title: row.title,
@@ -562,7 +563,9 @@ export const drizzlePortalRepository: PortalRepository = {
       })),
     }
   },
-  getSidebarItems: mockPortalRepository.getSidebarItems,
+  async getSidebarItems() {
+    return getSidebarItems()
+  },
 
   async getContactsData(query?: EmployeesQuery) {
     const page = query?.page ?? 1
@@ -957,9 +960,10 @@ export const drizzlePortalRepository: PortalRepository = {
   },
 
   async getProfileData(userId?: string): Promise<ProfileData> {
-    if (!userId) return mockPortalRepository.getProfileData()
+    if (!userId) throw new Error("PROFILE_NOT_FOUND")
     const profile = await this.getCurrentUserProfile(userId)
-    return profile ?? mockPortalRepository.getProfileData()
+    if (!profile) throw new Error("PROFILE_NOT_FOUND")
+    return profile
   },
 
   async getCurrentUserProfile(userId: string): Promise<ProfileData | null> {
@@ -1071,22 +1075,25 @@ export const drizzlePortalRepository: PortalRepository = {
       ? Math.ceil((new Date(nextVacationRaw.startDate).getTime() - today.getTime()) / 86400000)
       : null
 
-    const fallback = await mockPortalRepository.getProfileData()
+    const positionTitle = row.positionTitle ?? PROFILE_PLACEHOLDERS.position
+    const departmentName = row.departmentName ?? PROFILE_PLACEHOLDERS.department
     return mapProfileData({
-      ...fallback,
+      tabs: getProfileTabs(),
+      tasks: [],
+      payslips: [],
       userId: row.id,
       firstName: row.firstName,
       lastName: row.lastName,
       fullName: formatFullName(row.lastName, row.firstName, row.middleName),
       initials: formatInitials(row.lastName, row.firstName),
       role: row.role as UserRole,
-      roleTitle: row.positionTitle ?? fallback.roleTitle,
-      positionTitle: row.positionTitle ?? fallback.roleTitle,
-      department: row.departmentName ?? fallback.department,
+      roleTitle: positionTitle,
+      positionTitle,
+      department: departmentName,
       departmentId: row.departmentId,
-      phone: row.phone ?? fallback.phone,
+      phone: row.phone ?? "",
       email: row.email,
-      office: row.office ?? fallback.office,
+      office: row.office ?? "",
       avatarUrl: row.avatarUrl ?? undefined,
       legacyPresence:
         row.presence === "away" || row.presence === "offline" || row.presence === "office"
@@ -1097,7 +1104,7 @@ export const drizzlePortalRepository: PortalRepository = {
         status: mapPresenceFromLegacy(row.presence),
       },
       departmentTab: {
-        departmentName: row.departmentName ?? fallback.department,
+        departmentName,
         manager: departmentHead
           ? {
               id: departmentHead.id,
