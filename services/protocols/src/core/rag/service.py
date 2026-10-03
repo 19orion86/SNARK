@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 import threading
 import time
 import uuid
@@ -52,15 +54,43 @@ def _strip_json_fences(raw: str) -> str:
     return "\n".join(lines).strip()
 
 
+def _generate_fake(prompt: str) -> str:
+    """Детерминированный ответ без сети (LLM_PROVIDER=fake): тесты и CI.
+
+    Если в промпте есть фрагменты документов — отвечает текстом первого фрагмента
+    и ссылается на него; иначе возвращает no_info. Для промптов без JSON-схемы
+    возвращает фиксированную строку.
+    """
+    if "Формат ответа" not in prompt and "формате JSON" not in prompt:
+        return "fake-llm: ответ"
+    marker = "## Фрагменты документов"
+    fragments = prompt.split(marker, 1)[1] if marker in prompt else ""
+    match = re.search(r"\[1\] Документ: [^\n]*\n\n(.+?)\n\n", fragments, re.DOTALL)
+    if not match:
+        return json.dumps(
+            {"status": "no_info", "answer": "", "steps": [], "sources": []}, ensure_ascii=False
+        )
+    return json.dumps(
+        {
+            "status": "answered",
+            "answer": match.group(1).strip()[:500],
+            "steps": [],
+            "responsible": None,
+            "deadline": None,
+            "sources": [1],
+        },
+        ensure_ascii=False,
+    )
+
+
 class RAGService:
     """Сервис Retrieval-Augmented Generation.
 
-    Использует LangChain для генерации ответов на основе
-    корпоративной базы знаний (ChromaDB) с поддержкой
-    структурированного вывода через Pydantic-схемы.
+    Генерация ответов через LLM с поддержкой структурированного вывода
+    (Pydantic-схемы) и поиск по базе знаний портала (pgvector).
 
     Attributes:
-        provider: провайдер LLM (yandex_gpt, gigachat, nvidia_nim).
+        provider: провайдер LLM (yandex_gpt, gigachat, nvidia_nim, fake).
     """
 
     def __init__(self) -> None:
@@ -89,6 +119,8 @@ class RAGService:
             return await self._generate_gigachat(prompt, context)
         if self.provider == LLMProvider.NVIDIA_NIM:
             return await self._generate_nvidia_nim(prompt, context)
+        if self.provider == LLMProvider.FAKE:
+            return _generate_fake(prompt)
         raise ValueError(f"Неизвестный LLM-провайдер: {self.provider}")
 
     async def generate_structured(
@@ -130,20 +162,40 @@ class RAGService:
     async def search_knowledge_base(
         self,
         query: str,
+        user_id: uuid.UUID,
         top_k: int = 5,
     ) -> list[dict[str, Any]]:
-        """Поиск по корпоративной базе знаний (ChromaDB).
+        """Поиск по базе знаний портала (pgvector, схема rag).
+
+        Права проверяются в том же SQL-запросе, что и векторный поиск: в выдачу
+        попадают только чанки документов, которые пользователь может открыть в портале.
 
         Args:
             query: поисковый запрос.
+            user_id: пользователь портала, от имени которого идёт поиск.
             top_k: количество результатов.
 
         Returns:
-            Список документов с метаданными.
+            Чанки с документом, версией, разделом и оценкой близости.
         """
-        # TODO: реализовать подключение к ChromaDB
-        logger.info("Поиск в базе знаний", query=query[:50], top_k=top_k)
-        return []
+        # Импорт внутри метода: модуль ассистента сам зависит от RAGService.
+        from src.modules.assistant.service import AssistantService
+
+        logger.info("Поиск в базе знаний", top_k=top_k)
+        chunks = await AssistantService().search(user_id, query, top_k)
+        return [
+            {
+                "chunk_id": str(chunk.chunk_id),
+                "source_type": chunk.source_type,
+                "source_id": str(chunk.source_id),
+                "title": chunk.title,
+                "version": chunk.version,
+                "section": chunk.section_label,
+                "text": chunk.text,
+                "score": chunk.score,
+            }
+            for chunk in chunks
+        ]
 
     async def _generate_yandex(
         self,

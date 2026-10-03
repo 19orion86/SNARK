@@ -162,6 +162,13 @@
       "when": 1791046570772,
       "tag": "0022_snapshot_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791049899160,
+      "tag": "0023_goofy_vampiro",
+      "breakpoints": true
     }
   ]
 }

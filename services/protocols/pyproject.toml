@@ -27,6 +27,10 @@ dependencies = [
     "httpx>=0.28.0",
     "python-dotenv>=1.0.0",
     "python-docx>=1.1.2",
+    "pgvector>=0.3.6",
+    "sentence-transformers>=3.0.0",
+    "boto3>=1.35.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -67,3 +71,8 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["src/tests"]
+addopts = "-m 'not eval'"
+markers = [
+    "integration: нужна тестовая БД (RAG_TEST_DATABASE_URL), иначе пропускается",
+    "eval: оценка качества на реальной LLM, стоит денег; запуск: pytest -m eval",
+]

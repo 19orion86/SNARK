@@ -116,6 +116,9 @@ export const documents = pgTable("documents", {
     onDelete: "set null",
   }),
   ownerLabel: text("owner_label"),
+  // Статус актуальности для ассистента: draft | actual | archived | excluded.
+  // В индекс попадают только actual (явная публикация).
+  ragStatus: text("rag_status").notNull().default("draft"),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

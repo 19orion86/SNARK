@@ -41,5 +41,6 @@ if sys.platform == "win32":
 celery_app.autodiscover_tasks(
     [
         "src.modules.protocols.tasks",
+        "src.modules.assistant.tasks",
     ],
 )
