@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { db } from "@/lib/db/client"
 import { chatChannelMembers, chatChannels, chatMessages, departments, employeeProfiles, users } from "@/lib/db/schema"
+import { rowsOf } from "@/lib/db/rows"
 import { formatFullName } from "@/lib/portal-data/format-name"
 import type {
   ChatChannel,
@@ -144,9 +145,10 @@ export async function listMyChannels(userId: string): Promise<ChatChannelsListRe
 
   const channelIds = channelRows.map((row) => row.id)
 
-  // 2) Последние сообщения (DISTINCT ON)
+  // 2) Последние сообщения: по одному index scan на канал
+  //    (chat_messages_channel_created_idx), а не сортировка всех сообщений каналов.
   const lastMsgResult = await db.execute(sql`
-    SELECT DISTINCT ON (m.channel_id)
+    SELECT
       m.id,
       m.channel_id,
       m.author_id,
@@ -158,18 +160,19 @@ export async function listMyChannels(userId: string): Promise<ChatChannelsListRe
       m.metadata,
       m.created_at,
       m.edited_at
-    FROM chat_messages m
+    FROM chat_channel_members cm
+    CROSS JOIN LATERAL (
+      SELECT *
+      FROM chat_messages last_msg
+      WHERE last_msg.channel_id = cm.channel_id
+      ORDER BY last_msg.created_at DESC
+      LIMIT 1
+    ) m
     INNER JOIN users u ON u.id = m.author_id
-    WHERE m.channel_id IN (${sql.join(
-      channelIds.map((id) => sql`${id}::uuid`),
-      sql`, `
-    )})
-    ORDER BY m.channel_id, m.created_at DESC
+    WHERE cm.user_id = ${userId}::uuid
   `)
 
-  const lastMsgList = (
-    Array.isArray(lastMsgResult) ? lastMsgResult : []
-  ) as Array<{
+  const lastMsgList = rowsOf<{
     id: string
     channel_id: string
     author_id: string
@@ -181,7 +184,7 @@ export async function listMyChannels(userId: string): Promise<ChatChannelsListRe
     metadata: unknown
     created_at: Date | string
     edited_at: Date | string | null
-  }>
+  }>(lastMsgResult)
 
   const lastMap = new Map<string, (typeof lastMsgList)[number]>()
   for (const row of lastMsgList) {
@@ -225,9 +228,7 @@ export async function listMyChannels(userId: string): Promise<ChatChannelsListRe
     GROUP BY msg.channel_id
   `)
 
-  const unreadList = (
-    Array.isArray(unreadResult) ? unreadResult : []
-  ) as Array<{ channel_id: string; unread: number }>
+  const unreadList = rowsOf<{ channel_id: string; unread: number }>(unreadResult)
   const unreadMap = new Map<string, number>()
   for (const row of unreadList) {
     unreadMap.set(row.channel_id, Number(row.unread))

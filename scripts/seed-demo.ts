@@ -1,12 +1,12 @@
 import { config } from "dotenv"
 config({ path: ".env.local" })
+import { randomBytes } from "node:crypto"
 import bcrypt from "bcryptjs"
 import { eq } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-postgres"
 import { Pool } from "pg"
 import { departments, employeeProfiles, users } from "@/lib/db/schema"
 
-const DEFAULT_PASSWORD = "Temp123456"
 const MIN_SALT_ROUNDS = 12
 
 interface DemoEmployeeSeed {
@@ -179,7 +179,10 @@ async function main() {
       },
     ]
 
-    const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, getSaltRounds())
+    // Пароль демо-сотрудников: DEMO_USER_PASSWORD из .env.local, иначе случайный
+    // (вход под ними тогда невозможен, пока админ не задаст пароль).
+    const demoPassword = process.env.DEMO_USER_PASSWORD?.trim() || randomBytes(24).toString("base64url")
+    const passwordHash = await bcrypt.hash(demoPassword, getSaltRounds())
 
     for (const employee of employees) {
       const [lastName = "", firstName = "", middleName = ""] = employee.fullName.split(" ")

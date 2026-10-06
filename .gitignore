@@ -30,3 +30,8 @@ services/protocols/**/*.pyc
 services/protocols/.env
 services/protocols/.env.local
 services/protocols/**/*.egg-info/
+# Playwright
+e2e/.output/
+e2e/.report/
+playwright-report/
+test-results/

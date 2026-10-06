@@ -5,26 +5,12 @@ import { requireAuth, type AuthError } from "@/lib/auth/request-auth"
 import { isMockDb } from "@/lib/config/mode"
 import { db } from "@/lib/db/client"
 import { dashboardWidgets } from "@/lib/db/schema"
+import {
+  WIDGET_TYPES,
+  type DashboardWidgetItem,
+  type DashboardWidgetType,
+} from "@/lib/dashboard/widget-types"
 import { apiErrorSchema } from "@/lib/validators/portal"
-
-export const WIDGET_TYPES = [
-  "birthdays",
-  "new_hires",
-  "news",
-  "my_tasks",
-  "overdue",
-  "unread_chats",
-] as const
-
-export type DashboardWidgetType = (typeof WIDGET_TYPES)[number]
-
-export interface DashboardWidgetItem {
-  id: string
-  widgetType: DashboardWidgetType
-  sortOrder: number
-  enabled: boolean
-  config: Record<string, unknown> | null
-}
 
 const DEFAULT_WIDGETS: Array<{ widgetType: DashboardWidgetType; sortOrder: number; enabled: boolean }> = [
   { widgetType: "news", sortOrder: 0, enabled: true },

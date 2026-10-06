@@ -1,0 +1,13 @@
+-- Baseline-миграция: DDL нет, синхронизируется только meta-snapshot drizzle-kit.
+--
+-- Миграции 0011–0021 писались вручную без snapshot-файлов, поэтому
+-- `pnpm db:generate` строил diff от snapshot 0010 и заново создавал 37 таблиц
+-- (такая миграция падала бы с "already exists").
+-- Структура БД после 0021 сверена с lib/db/schema.ts скриптом
+-- scripts/schema-drift.py: расхождений по таблицам, колонкам, индексам и FK нет.
+-- Единственное отличие: колонки `tasks.search_vector` и
+-- `chat_messages.search_vector` (tsvector + GIN) есть в БД, но не описаны в
+-- schema.ts — ими управляет SQL из 0021.
+--
+-- После этой миграции `pnpm db:generate` снова выдаёт только реальные изменения.
+SELECT 1;
