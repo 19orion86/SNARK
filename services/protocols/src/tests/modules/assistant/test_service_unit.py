@@ -199,3 +199,18 @@ async def test_fake_provider_plain_text(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(settings, "llm_provider", LLMProvider.FAKE)
     assert await RAGService().generate("Привет") == "fake-llm: ответ"
     assert json.loads(await RAGService().generate("Верни в формате JSON"))["status"] == "no_info"
+
+
+async def test_structured_prompt_embeds_schema_as_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    # LLM копирует формат схемы из промпта: Python-repr с одинарными кавычками ломал разбор ответа.
+    captured: list[str] = []
+
+    async def fake_generate(self: RAGService, prompt: str, context: str | None = None) -> str:
+        captured.append(prompt)
+        return '{"status": "no_info", "answer": "Нет данных", "sources": []}'
+
+    monkeypatch.setattr(RAGService, "generate", fake_generate)
+    await RAGService().generate_structured("Вопрос?", LLMAnswer)
+
+    schema_text = captured[0].split("по следующей схеме:\n", 1)[1]
+    assert json.loads(schema_text) == LLMAnswer.model_json_schema()

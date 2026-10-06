@@ -149,7 +149,7 @@ class RAGService:
             schema=output_schema.__name__,
             provider=self.provider.value,
         )
-        json_schema = output_schema.model_json_schema()
+        json_schema = json.dumps(output_schema.model_json_schema(), ensure_ascii=False)
         full_prompt = (
             f"{prompt}\n\n"
             f"Верни ответ строго в формате JSON по следующей схеме:\n"
