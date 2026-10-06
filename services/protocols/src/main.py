@@ -1,5 +1,6 @@
 ﻿from fastapi import FastAPI
 
+from src.api.v1.assistant import router as assistant_router
 from src.api.v1.protocols import router as protocols_router
 from src.web.ui import router as ui_router
 
@@ -24,6 +25,7 @@ app = FastAPI(
 )
 
 app.include_router(protocols_router)
+app.include_router(assistant_router)
 app.include_router(ui_router)
 
 

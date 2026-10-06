@@ -27,6 +27,21 @@ class LLMProvider(str, Enum):
     YANDEX_GPT = "yandex_gpt"
     GIGACHAT = "gigachat"
     NVIDIA_NIM = "nvidia_nim"
+    FAKE = "fake"
+
+
+class EmbeddingProvider(str, Enum):
+    """Провайдер эмбеддингов ассистента."""
+
+    E5 = "e5"
+    FAKE = "fake"
+
+
+class RagStorage(str, Enum):
+    """Откуда ассистент берёт файлы документов."""
+
+    S3 = "s3"
+    LOCAL = "local"
 
 
 class Settings(BaseSettings):
@@ -52,6 +67,10 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0")
     celery_broker_url: str = Field(default="redis://localhost:6379/1")
     celery_result_backend: str = Field(default="redis://localhost:6379/2")
+    celery_task_always_eager: bool = Field(
+        default=False,
+        description="Выполнять задачи в процессе API без брокера (dev без Redis, E2E).",
+    )
 
     # --- Telegram ---
     telegram_bot_token: str = Field(default="")
@@ -106,6 +125,36 @@ class Settings(BaseSettings):
         default="",
         description="Shared-secret X-Internal-Token для sync с порталом.",
     )
+
+    # --- Ассистент по базе знаний (RAG) ---
+    rag_database_url: str = Field(
+        default="",
+        description=(
+            "База портала под ролью snark_rag (SELECT на public.*, полный доступ к rag.*). "
+            "Формат postgresql+asyncpg://..."
+        ),
+    )
+    embedding_provider: EmbeddingProvider = Field(default=EmbeddingProvider.E5)
+    embedding_model_name: str = Field(default="intfloat/multilingual-e5-large")
+    embedding_model_path: str = Field(
+        default="",
+        description="Локальный каталог модели (закрытый контур без доступа к HuggingFace).",
+    )
+    embedding_batch_size: int = Field(default=16)
+    rag_chunk_max_tokens: int = Field(default=450)
+    rag_chunk_overlap_tokens: int = Field(default=64)
+    rag_top_k: int = Field(default=6)
+    rag_min_score: float = Field(
+        default=0.80,
+        description="Порог косинусной близости: ниже — ответ no_info без вызова LLM.",
+    )
+    rag_storage: RagStorage = Field(default=RagStorage.S3)
+    rag_local_storage_dir: Path = Field(default=BASE_DIR / "storage")
+    s3_endpoint: str = Field(default="http://localhost:9000")
+    s3_region: str = Field(default="ru-central-1")
+    s3_bucket: str = Field(default="snark-portal")
+    s3_access_key_id: str = Field(default="")
+    s3_secret_access_key: str = Field(default="")
 
     # --- Безопасность ---
     encryption_key: str = Field(default="")

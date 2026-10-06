@@ -49,3 +49,4 @@ static/meetings/
 # Local database files (if any)
 *.sqlite3
 *.db
+tests/eval/report-*.json

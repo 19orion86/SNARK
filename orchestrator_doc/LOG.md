@@ -7,6 +7,60 @@ Append-only. **Новые записи — строго сверху.** Дета
 
 ---
 
+## 2026-10-03 — сессия [2026-10-03-02] ассистент по базе знаний (RAG), этапы 0–4
+
+**Основание:** `14_09_2026_TASK_ASSISTANT_RAG.md` v1.0.
+**Ветка:** `feature/assistant-rag` поверх `feature/portal-dorabotka` (локально, не запушена; PR не открыты).
+
+**Сделано**
+- Этап 0: `docs/DESIGN_ASSISTANT_RAG.md` — ответы на вопросы, DDL, контракт, риски, 8 вопросов ревьюеру.
+  **Записка ревьюером не принята**; код этапов 1–4 написан до приёмки по просьбе исполнителя.
+- Этап 1: `pgvector/pgvector:pg16` в compose; окружение `alembic_rag` (схема `rag`, своя таблица версий);
+  `documents.rag_status` (`0023`, через `pnpm db:generate`); роль `snark_rag` (`scripts/rag-role.sql`); `pnpm seed:content`.
+- Этап 2: `src/modules/assistant` — парсер docx по Heading1 и таблиц, нарезка по токенам e5, эмбеддинги,
+  идемпотентная индексация, Celery-задача с backoff, сверка в beat, эндпоинт reindex.
+- Этап 3: поиск с проверкой прав в одном SQL, whitelist профиля, структурированный ответ, проверка источников,
+  `/ask`, журнал `rag.queries`, провайдер `fake`; раздел в `API_CONTRACT.md`.
+- Этап 4: `/assistant`, `/admin/assistant`, прокси `app/api/assistant/*`, пункт навигации, E2E.
+- Попутно закрыт IDOR при скачивании документов (BUGS B-22) — без него правило A6 не выполнялось бы.
+
+**Verified (вывод команд, 03.10.2026):**
+
+```
+$ pnpm typecheck && pnpm lint                  (без ошибок)
+$ pnpm test
+ Test Files  16 passed (16)
+      Tests  298 passed (298)
+$ pnpm db:generate
+No schema changes, nothing to migrate
+$ python scripts/audit-route-auth.py
+handlers without auth check: 0
+$ pnpm test:e2e                                (production-сборка, Postgres, сервис ассистента запущен)
+  15 passed (1.9m)
+$ cd services/protocols && ruff check src/ tests/ scripts/ alembic_rag/
+All checks passed!
+$ RAG_TEST_DATABASE_URL=… pytest              (без переменной: 44 passed, 21 skipped)
+65 passed, 1 warning in 12.09s
+$ alembic -c alembic_rag.ini upgrade head && alembic -c alembic_rag.ini check
+Running upgrade  -> 20261003_000001
+No new upgrade operations detected.
+$ python scripts/e5_smoke.py
+dim=1024; запрос 0.13–0.21 с на CPU; близость: релевантные 0.85–0.86, посторонние 0.68–0.72
+```
+
+**Чего нет / не проверено**
+- Вводные задания не получены: 14 документов, системный промт, 9 эталонных вопросов, ключи LLM, логи n8n.
+  Тесты и E2E идут на синтетическом docx; промпт — заготовка; порог `RAG_MIN_SCORE=0.80` не откалиброван.
+- С реальной LLM ассистент не запускался ни разу (только провайдер `fake`).
+- Этап 5 не выполнен: `docs/EVAL_ASSISTANT_RAG.md` описывает только инструмент прогона.
+- Celery-воркер с Redis не запускался (eager-режим); Docker-образ pgvector не проверялся на существующем volume.
+- GitHub Actions на ветке не запускался (ветка не запушена).
+
+**Следующий шаг:** ревью записки (§9, особенно вопросы 1–3: базы на проде, pgvector, RAM); передать вводные;
+затем промпт, загрузка документов, eval и выбор провайдера.
+
+---
+
 ## 2026-10-03 — сессия [2026-10-03-01] доработка по итогам проверки 18.08 (фазы 1–4)
 
 **Основание:** документ «Портал ПКФ Снарк — итоги проверки и список доработок» (18.08.2026), база `025a79e`.

@@ -75,6 +75,18 @@ export default async function AdminPage() {
         </Card>
 
         <Card className="p-6">
+          <h2 className="text-lg font-semibold text-card-foreground">Ассистент</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Журнал вопросов сотрудников, вопросы без ответа и публикация документов для ассистента.
+          </p>
+          <div className="mt-4">
+            <Link href="/admin/assistant">
+              <Button className="bg-[#16223b] hover:bg-[#16223b]/90">Открыть раздел</Button>
+            </Link>
+          </div>
+        </Card>
+
+        <Card className="p-6">
           <h2 className="text-lg font-semibold text-card-foreground">База знаний</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             Создание и публикация статей корпоративной базы знаний с категориями и тегами.

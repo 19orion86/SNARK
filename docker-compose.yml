@@ -1,7 +1,12 @@
 services:
-  # PostgreSQL для локальной разработки портала
+  # PostgreSQL для локальной разработки портала.
+  # Образ с расширением pgvector (схема rag ассистента). Мажорная версия та же (16),
+  # поэтому существующий volume postgres_data подхватывается без dump/restore.
+  # После смены образа с alpine (musl) на debian (glibc) один раз выполните:
+  #   docker compose exec postgres psql -U portal_dev -d portal_dev -c "REINDEX DATABASE portal_dev"
+  # (у текстовых индексов другой порядок сортировки локали).
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: portal-postgres
     restart: unless-stopped
     environment:

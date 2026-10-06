@@ -1,0 +1,1 @@
+ALTER TABLE "documents" ADD COLUMN "rag_status" text DEFAULT 'draft' NOT NULL;

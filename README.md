@@ -239,6 +239,54 @@ nssm restart snark-portal
 
 ---
 
+## Ассистент по базе знаний (RAG)
+
+Раздел портала `/assistant`: сотрудник задаёт вопрос по регламентам и получает ответ со ссылкой на документ
+и раздел. Поиск и эмбеддинги работают в своём контуре (pgvector в базе портала, локальная модель
+`multilingual-e5-large`); наружу уходит только вызов LLM. Дизайн и открытые вопросы —
+[`docs/DESIGN_ASSISTANT_RAG.md`](docs/DESIGN_ASSISTANT_RAG.md), контракт —
+[`orchestrator_doc/API_CONTRACT.md`](orchestrator_doc/API_CONTRACT.md).
+
+Запуск на стенде:
+
+```bash
+# 1. Портал: поле documents.rag_status
+pnpm db:migrate
+
+# 2. Роль БД и схема rag (один раз, от владельца базы портала)
+psql "$DATABASE_URL" -v rag_password="'<пароль>'" -f scripts/rag-role.sql
+
+# 3. Python-сервис: RAG_DATABASE_URL, INTERNAL_TOKEN, LLM_PROVIDER в services/protocols/.env
+cd services/protocols
+alembic -c alembic_rag.ini upgrade head
+uvicorn src.main:app --port 8000
+celery -A src.core.celery_app worker -B        # индексация и сверка; без Redis — CELERY_TASK_ALWAYS_EAGER=true
+
+# 4. Документы
+pnpm seed:content <каталог с docx> [manifest.json]
+```
+
+Дальше в `/admin/assistant` → «Документы и индексация» выставить документу статус «Актуален».
+В индекс попадают только такие документы и опубликованные статьи базы знаний; формат файлов в v1 — docx.
+
+Проверки:
+
+```bash
+cd services/protocols
+pytest                                                   # unit; интеграционные пропускаются без БД
+RAG_TEST_DATABASE_URL=postgresql+asyncpg://… pytest      # + права доступа, архив, дубли на пустой тестовой БД
+pytest -m eval tests/eval -s                             # оценка качества на реальной LLM (платно)
+python scripts/e5_smoke.py                               # проверка модели эмбеддингов
+```
+
+E2E портала `e2e/assistant.spec.ts` требует запущенный сервис и демо-документ
+(`python services/protocols/scripts/make_demo_docx.py <dir> && pnpm seed:content <dir>`); без них пропускается.
+
+Ограничения текущего состояния: системный промт — заготовка, порог релевантности не откалиброван,
+оценка качества не проведена ([`docs/EVAL_ASSISTANT_RAG.md`](docs/EVAL_ASSISTANT_RAG.md)).
+
+---
+
 ## О модуле протоколов
 
 Исходный проект HR-бота (Module 3) интегрирован в `services/protocols/`:

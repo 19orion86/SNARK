@@ -164,6 +164,23 @@ jobs:
     needs: changes
     if: needs.changes.outputs.protocols == 'true'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: rag_test
+          POSTGRES_USER: rag_test
+          POSTGRES_PASSWORD: rag_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rag_test -d rag_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Пустая база для интеграционных тестов ассистента (права доступа, архив, дубли).
+      RAG_TEST_DATABASE_URL: postgresql+asyncpg://rag_test:rag_test_password@localhost:5432/rag_test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -179,7 +196,7 @@ jobs:
 
       - name: Ruff check
         working-directory: services/protocols
-        run: ruff check src/
+        run: ruff check src/ tests/ scripts/ alembic_rag/
 
       - name: Pytest
         working-directory: services/protocols

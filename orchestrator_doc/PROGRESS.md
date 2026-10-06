@@ -34,7 +34,7 @@ MVP портала live: auth, 33 страницы, 74 API routes, tasks/chat/pr
 5. **SYNC-SERVER** (оператор): серверные правки с `192.168.1.236` → git. **До этого — никаких DEP.**
 6. Прогнать миграции 0020–0022 на prod (ops)
 7. `/booking` — реализация (сейчас заглушка)
-8. Ассистент по базе знаний (RAG): [`docs/DESIGN_ASSISTANT_RAG.md`](../docs/DESIGN_ASSISTANT_RAG.md) — после гейта фазы 1
+8. Ассистент по базе знаний (RAG): ветка `feature/assistant-rag`, этапы 0–4 в коде; ждут ревью записки [`docs/DESIGN_ASSISTANT_RAG.md`](../docs/DESIGN_ASSISTANT_RAG.md) и вводных (документы, промт, ключи LLM). Этап 5 не начат
 9. Ответить на вопросы оператору в [`DEPLOY.md`](DEPLOY.md) §7
 
 ## Блокеры

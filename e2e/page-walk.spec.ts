@@ -12,13 +12,13 @@ import { loginViaUi, type E2ERole } from "./helpers"
 const COMMON_PAGES = [
   "/dashboard", "/news", "/contacts", "/structure", "/documents", "/knowledge",
   "/protocols", "/tasks", "/crm", "/chat", "/profile", "/support", "/calendar",
-  "/booking", "/about", "/vacations/calendar",
+  "/booking", "/about", "/vacations/calendar", "/assistant",
 ]
 
 const ADMIN_PAGES = [
   "/admin", "/admin/employees", "/admin/departments", "/admin/news", "/admin/knowledge",
   "/admin/ticket-sla", "/admin/support-categories", "/admin/vacations", "/admin/tasks",
-  "/admin/chat", "/admin/structure-import",
+  "/admin/chat", "/admin/structure-import", "/admin/assistant",
 ]
 
 const ADMIN_ONLY_PAGES = ["/admin/users", "/admin/tickets"]

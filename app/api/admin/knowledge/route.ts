@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { requestReindex } from "@/lib/assistant/client"
 import { requireRole, type AuthError } from "@/lib/auth/request-auth"
 import { writeAuditLog } from "@/lib/audit/log"
 import { getPortalRepositoryServer } from "@/lib/repositories/portal-repository.server"
@@ -57,6 +58,8 @@ export async function POST(request: NextRequest) {
       ...parsed.data,
       authorId: auth.userId,
     })
+    // Ассистент: опубликованная статья попадает в индекс, черновик — нет (решает сервис).
+    await requestReindex("article", created.id)
     await writeAuditLog({
       userId: auth.userId,
       action: "admin:knowledge:create",

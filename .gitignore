@@ -20,6 +20,9 @@ ecosystem.config.js
 # User uploads
 public/uploads/
 
+# Local dev storage: RAG files without MinIO, e5 model weights (~2 GB)
+/storage/
+
 # Python protocol service runtime data
 services/protocols/static/meetings/enc_*
 services/protocols/static/meetings/*.webm
